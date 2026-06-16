@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transformer Interview Questions</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@400;600&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #05080f;
+      --surface: #0d1220;
+      --surface2: #131929;
+      --border: #1e2d47;
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --accent-amber: #f59e0b;
+      --accent-green: #22d3a0;
+      --accent-red: #f87171;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --beginner: #22d3a0;
+      --intermediate: #f59e0b;
+      --advanced: #f87171;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-weight: 300;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Glow orbs */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(100px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .orb-1 { width: 500px; height: 500px; background: rgba(59,130,246,0.07); top: -100px; left: -100px; }
+    .orb-2 { width: 400px; height: 400px; background: rgba(6,182,212,0.05); bottom: 200px; right: -50px; }
+
+    /* HEADER */
+    header {
+      position: relative;
+      z-index: 1;
+      padding: 64px 24px 48px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent-cyan);
+      background: rgba(6,182,212,0.08);
+      border: 1px solid rgba(6,182,212,0.25);
+      padding: 5px 14px;
+      border-radius: 100px;
+      margin-bottom: 24px;
+    }
+    .header-tag::before { content: '◈'; font-size: 10px; }
+
+    h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(2.2rem, 6vw, 4rem);
+      font-weight: 400;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+    }
+    h1 em {
+      font-style: italic;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header-sub {
+      color: var(--muted);
+      font-size: 1rem;
+      font-weight: 400;
+      max-width: 480px;
+      margin: 0 auto 32px;
+      line-height: 1.6;
+    }
+
+    /* LEVEL PILLS */
+    .level-legend {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      padding: 5px 14px;
+      border-radius: 100px;
+      cursor: pointer;
+      border: 1px solid;
+      transition: all 0.2s;
+      user-select: none;
+    }
+    .pill.beginner  { color: var(--beginner); border-color: rgba(34,211,160,0.3); background: rgba(34,211,160,0.06); }
+    .pill.intermediate { color: var(--intermediate); border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.06); }
+    .pill.advanced  { color: var(--advanced); border-color: rgba(248,113,113,0.3); background: rgba(248,113,113,0.06); }
+    .pill.all       { color: var(--text); border-color: var(--border); background: var(--surface2); }
+    .pill:hover, .pill.active { opacity: 1; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+    .pill.all.active { border-color: var(--accent-blue); color: var(--accent-blue); }
+    .pill.beginner.active { background: rgba(34,211,160,0.15); border-color: var(--beginner); }
+    .pill.intermediate.active { background: rgba(245,158,11,0.15); border-color: var(--intermediate); }
+    .pill.advanced.active { background: rgba(248,113,113,0.15); border-color: var(--advanced); }
+
+    /* STATS BAR */
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      padding: 24px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      z-index: 1;
+    }
+    .stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .stat-num { font-size: 1.4rem; font-weight: 600; color: var(--accent-blue); }
+    .stat-label { color: var(--muted); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+
+    /* MAIN LAYOUT */
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    /* SECTION HEADERS */
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 48px 0 20px;
+    }
+    .section-header:first-child { margin-top: 0; }
+    .section-line { flex: 1; height: 1px; background: var(--border); }
+    .section-badge {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 100px;
+      border: 1px solid;
+      white-space: nowrap;
+    }
+    .section-badge.beginner  { color: var(--beginner); border-color: rgba(34,211,160,0.4); background: rgba(34,211,160,0.07); }
+    .section-badge.intermediate { color: var(--intermediate); border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.07); }
+    .section-badge.advanced  { color: var(--advanced); border-color: rgba(248,113,113,0.4); background: rgba(248,113,113,0.07); }
+
+    /* QUESTION CARDS */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 12px;
+      overflow: hidden;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .card:hover { border-color: #2a3d5e; box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
+    .card.beginner:hover     { border-color: rgba(34,211,160,0.25); }
+    .card.intermediate:hover { border-color: rgba(245,158,11,0.25); }
+    .card.advanced:hover     { border-color: rgba(248,113,113,0.25); }
+
+    .card-question {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 18px 20px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .q-num {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      padding-top: 3px;
+      min-width: 28px;
+      flex-shrink: 0;
+    }
+
+    .q-text {
+      flex: 1;
+      font-size: 0.95rem;
+      font-weight: 500;
+      line-height: 1.5;
+      color: var(--text);
+    }
+
+    .q-toggle {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--muted);
+      flex-shrink: 0;
+      transition: all 0.2s;
+      margin-top: 2px;
+    }
+    .card.open .q-toggle {
+      background: var(--accent-blue);
+      border-color: var(--accent-blue);
+      color: #fff;
+      transform: rotate(45deg);
+    }
+
+    /* ANSWER PANEL */
+    .card-answer {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s cubic-bezier(0.4,0,0.2,1);
+    }
+    .card.open .card-answer { max-height: 2000px; }
+
+    .answer-inner {
+      padding: 0 20px 20px 64px;
+      border-top: 1px solid var(--border);
+      padding-top: 18px;
+    }
+
+    .answer-inner p {
+      font-size: 0.9rem;
+      line-height: 1.75;
+      color: #94a3b8;
+      margin-bottom: 12px;
+    }
+    .answer-inner p:last-child { margin-bottom: 0; }
+
+    .answer-inner strong { color: var(--text); font-weight: 600; }
+
+    .answer-inner ul {
+      list-style: none;
+      margin: 10px 0;
+    }
+    .answer-inner ul li {
+      font-size: 0.88rem;
+      color: #94a3b8;
+      line-height: 1.7;
+      padding-left: 18px;
+      position: relative;
+      margin-bottom: 6px;
+    }
+    .answer-inner ul li::before {
+      content: '▸';
+      position: absolute;
+      left: 0;
+      color: var(--accent-blue);
+      font-size: 10px;
+      top: 5px;
+    }
+
+    .answer-inner code {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.78rem;
+      background: rgba(59,130,246,0.1);
+      border: 1px solid rgba(59,130,246,0.2);
+      color: var(--accent-cyan);
+      padding: 1px 7px;
+      border-radius: 4px;
+    }
+
+    .formula {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.82rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent-blue);
+      padding: 12px 16px;
+      border-radius: 6px;
+      color: var(--accent-cyan);
+      margin: 12px 0;
+      overflow-x: auto;
+    }
+
+    .tip {
+      background: rgba(245,158,11,0.06);
+      border: 1px solid rgba(245,158,11,0.2);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 0.85rem;
+      color: #cbd5e1;
+      margin-top: 12px;
+    }
+    .tip::before { content: '💡 Tip: '; color: var(--intermediate); font-weight: 600; }
+
+    /* HIDDEN CLASS */
+    .card.hidden { display: none; }
+
+    /* EXPAND ALL */
+    .toolbar {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 24px;
+    }
+    .btn-expand {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 6px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-expand:hover { color: var(--text); border-color: var(--accent-blue); }
+
+    /* FOOTER */
+    footer {
+      text-align: center;
+      padding: 32px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      position: relative;
+      z-index: 1;
+    }
+
+    @media (max-width: 600px) {
+      .answer-inner { padding-left: 20px; }
+      .stats { gap: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+
+  <header>
+    <div class="header-tag">Machine Learning · Interview Prep</div>
+    <h1>Mastering <em>Transformers</em></h1>
+    <p class="header-sub">Interview questions from first principles to production-grade architecture — sorted by difficulty.</p>
+    <div class="level-legend">
+      <span class="pill all active" onclick="filter('all', this)">All Levels</span>
+      <span class="pill beginner" onclick="filter('beginner', this)">● Beginner</span>
+      <span class="pill intermediate" onclick="filter('intermediate', this)">● Intermediate</span>
+      <span class="pill advanced" onclick="filter('advanced', this)">● Advanced</span>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><span class="stat-num" id="total-count">24</span><span class="stat-label">Questions</span></div>
+    <div class="stat"><span class="stat-num" style="color:var(--beginner)">8</span><span class="stat-label">Beginner</span></div>
+    <div class="stat"><span class="stat-num" style="color:var(--intermediate)">8</span><span class="stat-label">Intermediate</span></div>
+    <div class="stat"><span class="stat-num" style="color:var(--advanced)">8</span><span class="stat-label">Advanced</span></div>
+  </div>
+
+  <main>
+    <div class="toolbar">
+      <button class="btn-expand" id="expand-btn" onclick="toggleAll()">Expand All</button>
+    </div>
+
+    <!-- ── BEGINNER ── -->
+    <div class="section-header" data-level="beginner">
+      <div class="section-line"></div>
+      <span class="section-badge beginner">Beginner</span>
+      <div class="section-line"></div>
+    </div>
+
+    <div class="card beginner" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q01</span>
+        <span class="q-text">What is the Transformer model and why was it introduced?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>The Transformer is a deep learning architecture introduced in the 2017 paper <strong>"Attention Is All You Need"</strong> by Vaswani et al. at Google. It was designed to overcome the main limitations of RNNs and LSTMs for sequence-to-sequence tasks.</p>
+        <ul>
+          <li><strong>RNN problem:</strong> RNNs process tokens sequentially, making parallelization impossible and causing vanishing/exploding gradients over long sequences.</li>
+          <li><strong>Transformer solution:</strong> Uses self-attention to relate all tokens to each other simultaneously — enabling full parallelism during training.</li>
+          <li>Originally built for machine translation, it has since become the backbone of LLMs (GPT, BERT, T5, etc.).</li>
+        </ul>
+        <div class="tip">The name "transformer" refers to the way it transforms an input sequence into an output sequence via learned attention patterns.</div>
+      </div></div>
+    </div>
+
+    <div class="card beginner" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q02</span>
+        <span class="q-text">What is self-attention, and how does it differ from regular attention?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p><strong>Regular (cross) attention</strong> computes attention between two different sequences — e.g., an encoder's output and a decoder's input (as in seq2seq). <strong>Self-attention</strong> computes attention within a single sequence: every token attends to every other token in the same sequence.</p>
+        <p>This allows each token to build a contextual representation by aggregating information from all other relevant tokens, regardless of distance.</p>
+        <div class="formula">Output_i = Σ_j  softmax(Q_i · K_j / √d_k) · V_j</div>
+        <ul>
+          <li>Q (Query) — what this token is looking for</li>
+          <li>K (Key) — what each token offers to be found</li>
+          <li>V (Value) — the actual content to aggregate</li>
+        </ul>
+      </div></div>
+    </div>
+
+    <div class="card beginner" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q03</span>
+        <span class="q-text">What are the main components of a Transformer block?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>A single Transformer block (or layer) contains:</p>
+        <ul>
+          <li><strong>Multi-Head Self-Attention (MHSA)</strong> — attends across all token positions</li>
+          <li><strong>Add & Norm</strong> — residual connection + LayerNorm after attention</li>
+          <li><strong>Feed-Forward Network (FFN)</strong> — two linear layers with a non-linearity (GELU or ReLU)</li>
+          <li><strong>Add & Norm</strong> — residual connection + LayerNorm after FFN</li>
+        </ul>
+        <p>The encoder stack is these two sub-layers. The decoder adds a third: <strong>cross-attention</strong> over encoder output.</p>
+      </div></div>
+    </div>
+
+    <div class="card beginner" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q04</span>
+        <span class="q-text">Why do we need positional encoding?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>Self-attention is <strong>permutation-invariant</strong> — it has no inherent notion of token order. Without positional information, "dog bites man" and "man bites dog" would produce identical representations.</p>
+        <p>Positional encodings inject order information. The original paper uses <strong>sinusoidal encodings</strong>:</p>
+        <div class="formula">PE(pos, 2i)   = sin(pos / 10000^(2i/d_model))
+PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))</div>
+        <p>These are added element-wise to token embeddings. Modern models like RoPE (Rotary Position Embedding) and ALiBi learn or compute positional information differently.</p>
+      </div></div>
+    </div>
+
+    <div class="card beginner" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q05</span>
+        <span class="q-text">What is the role of the Feed-Forward layer in a Transformer?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>The FFN applies a two-layer MLP to each position <strong>independently and identically</strong>:</p>
+        <div class="formula">FFN(x) = max(0, xW₁ + b₁)W₂ + b₂   [original: ReLU]
+FFN(x) = GELU(xW₁ + b₁)W₂ + b₂   [modern variants]</div>
+        <p>The hidden dimension is usually 4× the model dimension (e.g., 4096 hidden for a 1024-dim model). Research suggests the FFN acts as a <strong>key-value memory</strong> storing factual associations learned during training, complementing the attention mechanism's relational reasoning.</p>
+      </div></div>
+    </div>
+
+    <div class="card beginner" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q06</span>
+        <span class="q-text">What is the difference between encoder-only, decoder-only, and encoder-decoder Transformers?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <ul>
+          <li><strong>Encoder-only (e.g., BERT)</strong> — bidirectional; every token attends to all others. Best for understanding tasks: classification, NER, QA.</li>
+          <li><strong>Decoder-only (e.g., GPT, LLaMA)</strong> — causal (left-to-right) masked attention; each token only attends to past tokens. Best for text generation / autoregressive tasks.</li>
+          <li><strong>Encoder-decoder (e.g., T5, BART)</strong> — encoder reads full input, decoder generates output attending to encoder states via cross-attention. Best for translation, summarization, seq2seq.</li>
+        </ul>
+        <div class="tip">Most modern LLMs (GPT-4, LLaMA, Mistral) are decoder-only due to simplicity and scaling efficiency.</div>
+      </div></div>
+    </div>
+
+    <div class="card beginner" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q07</span>
+        <span class="q-text">What is Layer Normalization and why is it used in Transformers?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p><strong>LayerNorm</strong> normalizes the activations across the feature dimension (not the batch dimension like BatchNorm):</p>
+        <div class="formula">LayerNorm(x) = γ · (x − μ) / (σ + ε) + β</div>
+        <p>Benefits in Transformers:</p>
+        <ul>
+          <li>Stabilizes training of very deep networks</li>
+          <li>Works well with variable-length sequences (unlike BatchNorm)</li>
+          <li>Enables larger learning rates</li>
+        </ul>
+        <p>Modern variants: <strong>Pre-LN</strong> (applies norm before the sub-layer) is now preferred over Post-LN for stability in very deep models. <strong>RMSNorm</strong> (used in LLaMA) is a simpler variant that drops the mean subtraction.</p>
+      </div></div>
+    </div>
+
+    <div class="card beginner" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q08</span>
+        <span class="q-text">What is tokenization and why does it matter for Transformers?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>Tokenization converts raw text into integer IDs that the model processes. The Transformer never sees raw characters — only token IDs looked up in an embedding matrix.</p>
+        <ul>
+          <li><strong>BPE (Byte Pair Encoding)</strong> — used by GPT-2/4; merges frequent character pairs iteratively</li>
+          <li><strong>WordPiece</strong> — used by BERT; similar but maximizes likelihood</li>
+          <li><strong>SentencePiece</strong> — language-agnostic, used by T5/LLaMA</li>
+        </ul>
+        <p>Tokenization quality directly impacts model performance: a poor vocabulary forces the model to represent common words with multiple tokens, wasting context window capacity and degrading arithmetic / coding ability.</p>
+        <div class="tip">GPT-4 uses ~100K vocab tokens via tiktoken. LLaMA 3 uses 128K. Larger vocab = fewer tokens per word = more efficient context usage.</div>
+      </div></div>
+    </div>
+
+    <!-- ── INTERMEDIATE ── -->
+    <div class="section-header" data-level="intermediate">
+      <div class="section-line"></div>
+      <span class="section-badge intermediate">Intermediate</span>
+      <div class="section-line"></div>
+    </div>
+
+    <div class="card intermediate" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q09</span>
+        <span class="q-text">Explain Multi-Head Attention. Why use multiple heads?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>Multi-Head Attention runs <strong>h independent attention heads</strong> in parallel, each with its own Q, K, V projection matrices of dimension <code>d_k = d_model / h</code>:</p>
+        <div class="formula">MultiHead(Q,K,V) = Concat(head₁, ..., headₕ) · Wᴼ
+  headᵢ = Attention(Q·Wᵢᴼ, K·Wᵢᴷ, V·Wᵢᵛ)</div>
+        <p>Why multiple heads?</p>
+        <ul>
+          <li>Each head can learn to attend to different types of relationships simultaneously (syntax, coreference, semantics, position)</li>
+          <li>Provides richer representational capacity than a single wider attention</li>
+          <li>Interpretability research shows different heads specialize (e.g., heads that track subject-verb agreement vs. co-reference)</li>
+        </ul>
+        <p>The outputs of all heads are concatenated and projected back to <code>d_model</code> via <code>Wᴼ</code>.</p>
+      </div></div>
+    </div>
+
+    <div class="card intermediate" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q10</span>
+        <span class="q-text">What is the computational complexity of self-attention, and why is it a bottleneck?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>Standard self-attention is <strong>O(n² · d)</strong> in time and <strong>O(n²)</strong> in memory, where n is sequence length and d is model dimension.</p>
+        <p>This quadratic bottleneck means:</p>
+        <ul>
+          <li>Doubling context length → 4× compute and memory for the attention matrix</li>
+          <li>At n=100K tokens, the attention matrix alone is ~40GB in float32</li>
+        </ul>
+        <p>Solutions include:</p>
+        <ul>
+          <li><strong>Flash Attention</strong> — kernel fusion + tiling to avoid materializing the full matrix; same result, O(n) memory</li>
+          <li><strong>Sparse Attention</strong> — attend only to a local window or fixed global tokens (Longformer, BigBird)</li>
+          <li><strong>Linear Attention</strong> — kernel trick approximation (Performer, RWKV)</li>
+          <li><strong>GQA / MQA</strong> — group/multi-query attention reduces KV cache size</li>
+        </ul>
+      </div></div>
+    </div>
+
+    <div class="card intermediate" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q11</span>
+        <span class="q-text">What is the KV Cache, and how does it speed up inference?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>During autoregressive generation, each new token needs to attend to all previous tokens. Without a cache, we'd recompute all K and V projections from scratch for every decoding step — O(n²) total work.</p>
+        <p>The <strong>KV Cache</strong> stores the Key and Value tensors for all previously generated tokens. At each step, we only compute K and V for the new token and append to the cache:</p>
+        <ul>
+          <li>Reduces per-step attention cost from O(n·d) → O(1) new projections</li>
+          <li>Memory cost: <code>2 × n_layers × n_heads × d_head × sequence_length × bytes_per_element</code></li>
+          <li>At long contexts, KV cache can exceed model weight size — motivating GQA, quantized KV caches, and sliding window attention</li>
+        </ul>
+        <div class="tip">For LLaMA 3 70B at 128K context in float16, the KV cache is ~137GB — larger than the model itself.</div>
+      </div></div>
+    </div>
+
+    <div class="card intermediate" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q12</span>
+        <span class="q-text">What is the difference between BERT and GPT pre-training objectives?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <ul>
+          <li><strong>BERT (Masked Language Modeling)</strong> — randomly masks 15% of tokens and trains the model to predict them using full bidirectional context. Also uses Next Sentence Prediction (NSP). Produces strong contextual embeddings for understanding tasks.</li>
+          <li><strong>GPT (Causal Language Modeling)</strong> — predicts the next token given all previous tokens. Autoregressive; uses causal masking. Naturally suited for generation.</li>
+        </ul>
+        <p>Key practical difference: BERT cannot generate text (it sees future tokens during training), while GPT cannot naturally leverage right-side context. T5 unifies both via a text-to-text format with masked span prediction.</p>
+      </div></div>
+    </div>
+
+    <div class="card intermediate" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q13</span>
+        <span class="q-text">What is Rotary Positional Embedding (RoPE), and why is it preferred in modern LLMs?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p><strong>RoPE</strong> encodes position by rotating Query and Key vectors in a 2D plane by an angle proportional to the token's absolute position. The key insight: the dot product Q·K then depends only on their <em>relative</em> positions.</p>
+        <div class="formula">RoPE(x, pos) = x · [cos(mθ) + i·sin(mθ)]   (complex notation)</div>
+        <p>Why preferred over learned or sinusoidal encodings:</p>
+        <ul>
+          <li>Naturally encodes <strong>relative positions</strong> — crucial for length generalization</li>
+          <li>No extra parameters beyond the rotation angle</li>
+          <li>Enables context extension via <strong>RoPE scaling</strong> (YaRN, NTK-aware), allowing models trained at 4K to generalize to 128K+ context</li>
+          <li>Used in LLaMA, Mistral, Qwen, Falcon, and most modern open-weight LLMs</li>
+        </ul>
+      </div></div>
+    </div>
+
+    <div class="card intermediate" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q14</span>
+        <span class="q-text">What is Grouped Query Attention (GQA) and how does it differ from MHA and MQA?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <ul>
+          <li><strong>MHA (Multi-Head Attention)</strong> — each of h heads has its own Q, K, V. Full expressiveness, highest memory.</li>
+          <li><strong>MQA (Multi-Query Attention)</strong> — all heads share a single K and V (only Q is per-head). Fastest inference, smallest KV cache, but sometimes quality degradation.</li>
+          <li><strong>GQA (Grouped Query Attention)</strong> — heads are partitioned into G groups; heads in the same group share K and V. A sweet spot between MHA and MQA.</li>
+        </ul>
+        <div class="formula">KV cache size ratio: MHA=1x, GQA=G/h, MQA=1/h</div>
+        <p>GQA (used in LLaMA 3, Mistral, Gemma) typically uses G=8 groups for 32 heads, giving 4× KV cache reduction with negligible quality loss.</p>
+      </div></div>
+    </div>
+
+    <div class="card intermediate" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q15</span>
+        <span class="q-text">What is Flash Attention and why is it important?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>Flash Attention (Dao et al., 2022) is an <strong>IO-aware, exact attention algorithm</strong>. It produces mathematically identical results to standard attention, but is dramatically faster and more memory-efficient.</p>
+        <p>Key ideas:</p>
+        <ul>
+          <li><strong>Tiling</strong> — splits Q, K, V into blocks that fit in fast SRAM (on-chip) rather than the slow HBM (GPU DRAM)</li>
+          <li><strong>Online softmax</strong> — computes the softmax incrementally without materializing the full n×n attention matrix</li>
+          <li>Reduces HBM reads/writes from O(n²) to O(n), achieving <strong>2-4× speedup</strong> on A100s</li>
+          <li>Memory usage drops from O(n²) to O(n)</li>
+        </ul>
+        <p>Flash Attention 2 & 3 extended this with better GPU utilization and support for MQA/GQA, and are now standard in all major LLM frameworks.</p>
+      </div></div>
+    </div>
+
+    <div class="card intermediate" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q16</span>
+        <span class="q-text">What is the Scaling Laws insight and why does it matter?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>The <strong>Neural Scaling Laws</strong> paper (Kaplan et al., 2020) and the <strong>Chinchilla</strong> paper (Hoffmann et al., 2022) showed that LLM performance follows predictable power laws as you scale compute, parameters, and data.</p>
+        <p>Chinchilla's key finding: for a given compute budget C (FLOPs), the optimal strategy is:</p>
+        <div class="formula">N_optimal ∝ C^0.5   (model parameters)
+D_optimal ∝ C^0.5   (training tokens)
+Rule of thumb: ~20 tokens per parameter</div>
+        <ul>
+          <li>GPT-3 (175B params, 300B tokens) was <em>undertrained</em> by Chinchilla standards</li>
+          <li>Chinchilla (70B, 1.4T tokens) outperformed much larger undertrained models</li>
+          <li>This shifted the field toward training smaller models on more data: LLaMA, Mistral, Phi</li>
+        </ul>
+      </div></div>
+    </div>
+
+    <!-- ── ADVANCED ── -->
+    <div class="section-header" data-level="advanced">
+      <div class="section-line"></div>
+      <span class="section-badge advanced">Advanced</span>
+      <div class="section-line"></div>
+    </div>
+
+    <div class="card advanced" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q17</span>
+        <span class="q-text">How does Mixture of Experts (MoE) work in Transformers?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>In a <strong>Sparse MoE Transformer</strong>, the FFN layer is replaced with E expert FFNs, but only top-k (typically k=2) experts are activated per token via a <strong>gating network</strong>:</p>
+        <div class="formula">MoE(x) = Σᵢ∈TopK  G(x)ᵢ · Expertᵢ(x)
+G(x) = Softmax(TopK(x · Wg, k))</div>
+        <p>Benefits:</p>
+        <ul>
+          <li><strong>Parameter efficiency</strong> — Mixtral 8x7B has 47B total params but only ~13B active per token</li>
+          <li>Same inference cost as a ~13B dense model with the capacity of 47B</li>
+          <li>Experts can specialize in different domains/skills</li>
+        </ul>
+        <p>Challenges: <strong>load balancing</strong> (preventing expert collapse where all tokens route to same expert), auxiliary load balancing loss, and higher memory requirements since all expert weights must be loaded.</p>
+      </div></div>
+    </div>
+
+    <div class="card advanced" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q18</span>
+        <span class="q-text">Explain the RLHF pipeline (Reinforcement Learning from Human Feedback).</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>RLHF aligns a pre-trained LLM with human preferences through three stages:</p>
+        <ul>
+          <li><strong>Stage 1 — SFT (Supervised Fine-Tuning):</strong> Fine-tune the base model on curated demonstration data (human-written ideal responses).</li>
+          <li><strong>Stage 2 — Reward Model (RM):</strong> Train a separate model to score outputs based on human preference comparisons. Given two responses A and B, humans label which is better; the RM learns to predict that ranking.</li>
+          <li><strong>Stage 3 — RL via PPO:</strong> Use PPO (Proximal Policy Optimization) to fine-tune the SFT model to maximize the RM score, with a KL divergence penalty to prevent the policy from drifting too far from the SFT model.</li>
+        </ul>
+        <div class="formula">Reward = RM(response) − β · KL(π_RL || π_SFT)</div>
+        <p>Modern alternatives: <strong>DPO (Direct Preference Optimization)</strong> eliminates the separate RM by analytically solving the RLHF optimization, making it simpler and more stable. Used by LLaMA 3, Mistral Instruct.</p>
+      </div></div>
+    </div>
+
+    <div class="card advanced" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q19</span>
+        <span class="q-text">What is speculative decoding and how does it accelerate inference?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p><strong>Speculative decoding</strong> (Leviathan et al., 2023) uses a small fast <em>draft model</em> to speculatively generate k tokens, then verifies them in a single forward pass of the large target model.</p>
+        <p>Key insight: the large model can evaluate k tokens in parallel (unlike serial autoregressive decoding) with the same compute as a single token step if the KV cache is managed correctly.</p>
+        <ul>
+          <li>If all k draft tokens are accepted → k-token speedup for 1 forward pass cost</li>
+          <li>If draft diverges at position j → reject tokens j..k and resample from the target distribution at position j</li>
+          <li>Output distribution is <strong>identical</strong> to the target model (not an approximation)</li>
+          <li>Typical speedup: 2-3× for code/repetitive text; less for creative tasks</li>
+        </ul>
+        <div class="tip">Self-speculative decoding (Medusa, draft-and-verify within same model using auxiliary heads) avoids needing a separate draft model.</div>
+      </div></div>
+    </div>
+
+    <div class="card advanced" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q20</span>
+        <span class="q-text">What is LoRA and how does it enable efficient fine-tuning?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p><strong>LoRA (Low-Rank Adaptation)</strong> freezes the pre-trained model weights and injects trainable rank-decomposition matrices into each target layer:</p>
+        <div class="formula">W' = W₀ + ΔW = W₀ + B·A
+  B ∈ ℝ^(d×r),  A ∈ ℝ^(r×k),  r << min(d,k)</div>
+        <p>A is initialized randomly (often Kaiming uniform), B is initialized to zero so ΔW=0 at the start. Only A and B are trained — typically 0.1–1% of total parameters.</p>
+        <ul>
+          <li><strong>QLoRA</strong> — further quantizes frozen weights to 4-bit NF4 while keeping adapters in bfloat16. Enables fine-tuning 70B models on a single A100.</li>
+          <li>Common target modules: Q, K, V, O projections in attention; increasingly MLP layers too for reasoning tasks.</li>
+          <li><strong>Rank selection</strong>: r=8–64 typical. Higher rank = more capacity but more parameters. α/r scaling (usually α=2r) controls adapter contribution magnitude.</li>
+        </ul>
+      </div></div>
+    </div>
+
+    <div class="card advanced" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q21</span>
+        <span class="q-text">How does Retrieval-Augmented Generation (RAG) integrate with Transformers?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>RAG (Lewis et al., 2020) augments a parametric LLM with non-parametric retrieval. At inference time:</p>
+        <ul>
+          <li>Query is embedded and used to retrieve top-k relevant documents from a vector store (dense retrieval via DPR, E5, etc.)</li>
+          <li>Retrieved documents are concatenated into the context window</li>
+          <li>The LLM generates conditioned on both the query and retrieved context</li>
+        </ul>
+        <p>Architecture variants:</p>
+        <ul>
+          <li><strong>RAG-Sequence</strong> — retrieve once; generate full answer conditioned on same document</li>
+          <li><strong>RAG-Token</strong> — re-retrieve at each generation step (expensive but more accurate)</li>
+          <li><strong>FLARE / ITER-RETGEN</strong> — iterative retrieval during generation when the model expresses uncertainty</li>
+        </ul>
+        <p>Key challenge: <strong>lost-in-the-middle</strong> — LLMs tend to attend poorly to information in the middle of long contexts. Mitigated by reranking and positional ordering strategies.</p>
+      </div></div>
+    </div>
+
+    <div class="card advanced" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q22</span>
+        <span class="q-text">What causes hallucinations in LLMs and how can they be mitigated?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>LLM hallucinations — generating confident but incorrect facts — stem from several interacting causes:</p>
+        <ul>
+          <li><strong>Knowledge gaps</strong>: the pre-training corpus may lack or have noisy coverage of certain facts</li>
+          <li><strong>Distribution shift</strong>: RLHF trains for perceived quality, inadvertently rewarding fluency over factuality</li>
+          <li><strong>Sycophancy</strong>: models trained on human feedback learn to agree with the user rather than be accurate</li>
+          <li><strong>Overconfident prediction</strong>: next-token cross-entropy loss does not penalize confident wrong predictions differently from uncertain ones</li>
+        </ul>
+        <p>Mitigation strategies:</p>
+        <ul>
+          <li>RAG — ground generation in retrieved documents</li>
+          <li>Chain-of-thought + self-consistency — sample multiple reasoning paths, take majority vote</li>
+          <li>Calibration fine-tuning — train the model to express uncertainty</li>
+          <li>Constitutional AI / factuality RLHF — reward factual accuracy explicitly</li>
+        </ul>
+      </div></div>
+    </div>
+
+    <div class="card advanced" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q23</span>
+        <span class="q-text">What is activation checkpointing and how does it trade compute for memory?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p>During backpropagation, PyTorch stores all intermediate activations from the forward pass (needed to compute gradients). For a transformer with L layers and sequence length n, this is O(L·n·d) memory.</p>
+        <p><strong>Gradient/activation checkpointing</strong> stores only a subset of activations (checkpoints) during the forward pass — typically at the boundary of each Transformer block — and <strong>recomputes</strong> the remaining activations during backpropagation:</p>
+        <ul>
+          <li>Memory: O(√L · n · d) instead of O(L · n · d)</li>
+          <li>Compute overhead: ~33% extra FLOPs (one extra forward pass per layer during backward)</li>
+          <li>In practice: reduces activation memory by ~8-12× for GPT-scale models</li>
+        </ul>
+        <p>Used with <code>torch.utils.checkpoint.checkpoint()</code> in PyTorch. Essential for fine-tuning large models (QLoRA training) on limited GPU memory.</p>
+      </div></div>
+    </div>
+
+    <div class="card advanced" onclick="toggle(this)">
+      <div class="card-question">
+        <span class="q-num">Q24</span>
+        <span class="q-text">What are the key architectural differences between Transformer-based models and State Space Models (SSMs) like Mamba?</span>
+        <div class="q-toggle">+</div>
+      </div>
+      <div class="card-answer"><div class="answer-inner">
+        <p><strong>SSMs</strong> (S4, H3, Mamba) represent an alternative to attention for sequence modeling:</p>
+        <ul>
+          <li><strong>Recurrent inference</strong>: like RNNs, SSMs run in O(1) per step at inference — no KV cache needed</li>
+          <li><strong>Linear training</strong>: can be computed as a convolution over the sequence — O(n log n) with FFT vs O(n²) for attention</li>
+          <li><strong>Selective State Spaces (Mamba)</strong>: makes SSM parameters input-dependent, giving it selective attention-like ability</li>
+        </ul>
+        <p>Comparison:</p>
+        <ul>
+          <li><strong>Transformers</strong>: exact recall of all prior tokens, O(n²) compute, excellent for tasks requiring in-context lookup</li>
+          <li><strong>Mamba</strong>: O(n) compute and memory, fast inference, but limited long-range recall (compresses context into fixed-size state)</li>
+          <li><strong>Hybrid (Jamba, Zamba)</strong>: interleave SSM and attention layers to combine strengths</li>
+        </ul>
+        <div class="tip">Mamba-2 established a theoretical connection between SSMs and linear attention, unifying both under the "structured state space duality" framework.</div>
+      </div></div>
+    </div>
+
+  </main>
+
+  <footer>
+    <span>Transformer Interview Prep · 24 Questions · Beginner → Advanced</span>
+  </footer>
+
+  <script>
+    function toggle(card) {
+      card.classList.toggle('open');
+    }
+
+    let allOpen = false;
+    function toggleAll() {
+      const btn = document.getElementById('expand-btn');
+      const visible = document.querySelectorAll('.card:not(.hidden)');
+      allOpen = !allOpen;
+      visible.forEach(c => allOpen ? c.classList.add('open') : c.classList.remove('open'));
+      btn.textContent = allOpen ? 'Collapse All' : 'Expand All';
+    }
+
+    function filter(level, pill) {
+      document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      const cards = document.querySelectorAll('.card');
+      cards.forEach(c => {
+        if (level === 'all' || c.classList.contains(level)) {
+          c.classList.remove('hidden');
+        } else {
+          c.classList.add('hidden');
+          c.classList.remove('open');
+        }
+      });
+      document.querySelectorAll('.section-header').forEach(h => {
+        const lvl = h.dataset.level;
+        h.style.display = (level === 'all' || level === lvl) ? 'flex' : 'none';
+      });
+      // update total count
+      const visible = document.querySelectorAll('.card:not(.hidden)').length;
+      document.getElementById('total-count').textContent = visible;
+      allOpen = false;
+      document.getElementById('expand-btn').textContent = 'Expand All';
+    }
+  </script>
+</body>
+</html>

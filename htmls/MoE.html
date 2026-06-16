@@ -1,0 +1,1940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mixture of Experts — Deep Dive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ── TOKENS ─────────────────────────────────── */
+  :root {
+    --bg:         #0a0b0f;
+    --surface:    #111318;
+    --surface2:   #181c24;
+    --border:     #1f2633;
+    --accent:     #6c63ff;
+    --accent2:    #f5a623;
+    --accent3:    #4ecdc4;
+    --accent4:    #ff6b6b;
+    --text:       #e8e9f0;
+    --muted:      #6b7280;
+    --mono:       'JetBrains Mono', monospace;
+    --display:    'Playfair Display', serif;
+    --body:       'Inter', sans-serif;
+  }
+
+  /* ── RESET ──────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ── SCROLL REVEAL ──────────────────────────── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(32px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .reveal-left {
+    opacity: 0;
+    transform: translateX(-40px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reveal-left.visible { opacity: 1; transform: translateX(0); }
+  .reveal-right {
+    opacity: 0;
+    transform: translateX(40px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reveal-right.visible { opacity: 1; transform: translateX(0); }
+
+  /* ── HERO ───────────────────────────────────── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 80px 24px 60px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 20% 50%, rgba(108,99,255,0.13) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 40% at 80% 40%, rgba(78,205,196,0.09) 0%, transparent 65%),
+      radial-gradient(ellipse 40% 60% at 50% 80%, rgba(245,166,35,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .hero-eyebrow::before, .hero-eyebrow::after {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 1px;
+    background: var(--accent);
+    opacity: 0.5;
+  }
+  .hero h1 {
+    font-family: var(--display);
+    font-size: clamp(42px, 8vw, 96px);
+    font-weight: 900;
+    line-height: 1.0;
+    letter-spacing: -0.02em;
+    max-width: 900px;
+    margin-bottom: 12px;
+  }
+  .hero h1 .highlight {
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent3) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero-sub {
+    font-size: clamp(15px, 2vw, 18px);
+    color: var(--muted);
+    max-width: 560px;
+    margin: 20px auto 48px;
+    font-weight: 300;
+    line-height: 1.8;
+  }
+  .hero-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 60px;
+  }
+  .badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 6px 14px;
+    border-radius: 4px;
+    border: 1px solid;
+    letter-spacing: 0.05em;
+  }
+  .badge-purple { border-color: rgba(108,99,255,0.4); color: #a09af5; background: rgba(108,99,255,0.08); }
+  .badge-teal   { border-color: rgba(78,205,196,0.4); color: #7ee8e3; background: rgba(78,205,196,0.08); }
+  .badge-orange { border-color: rgba(245,166,35,0.4); color: #f7c06a; background: rgba(245,166,35,0.08); }
+  .badge-red    { border-color: rgba(255,107,107,0.4); color: #ff9999; background: rgba(255,107,107,0.08); }
+
+  /* ── ANIMATED ROUTER VIZ ────────────────────── */
+  .router-viz {
+    width: 100%;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  #routerCanvas {
+    width: 100%;
+    height: 320px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  /* ── NAV PILL ───────────────────────────────── */
+  .chapter-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(10,11,15,0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .chapter-nav::-webkit-scrollbar { display: none; }
+  .nav-item {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 16px 18px;
+    white-space: nowrap;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s, border-color 0.2s;
+    text-decoration: none;
+    display: block;
+  }
+  .nav-item:hover, .nav-item.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* ── SECTION WRAPPER ────────────────────────── */
+  .section {
+    padding: 100px 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .section-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  .section-title {
+    font-family: var(--display);
+    font-size: clamp(30px, 5vw, 52px);
+    font-weight: 700;
+    line-height: 1.1;
+    margin-bottom: 20px;
+  }
+  .section-intro {
+    font-size: 17px;
+    color: var(--muted);
+    max-width: 680px;
+    line-height: 1.8;
+    margin-bottom: 60px;
+  }
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 0;
+  }
+
+  /* ── CONCEPT CARDS ──────────────────────────── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    transition: border-color 0.3s, transform 0.3s;
+  }
+  .card:hover {
+    border-color: var(--accent);
+    transform: translateY(-4px);
+  }
+  .card-icon {
+    width: 40px; height: 40px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+  .card h3 {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 10px;
+    color: var(--text);
+  }
+  .card p {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  /* ── ARCHITECTURE DIAGRAM ───────────────────── */
+  .arch-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .arch-row {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    justify-content: center;
+    margin: 12px 0;
+    flex-wrap: wrap;
+  }
+  .arch-block {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    text-align: center;
+    min-width: 100px;
+    transition: background 0.3s, border-color 0.3s;
+  }
+  .arch-block.input-block  { border-color: rgba(108,99,255,0.5); color: #a09af5; background: rgba(108,99,255,0.1); }
+  .arch-block.router-block { border-color: rgba(245,166,35,0.5); color: #f7c06a; background: rgba(245,166,35,0.1); }
+  .arch-block.expert-block { border-color: rgba(78,205,196,0.4); color: #7ee8e3; background: rgba(78,205,196,0.08); font-size: 11px; }
+  .arch-block.expert-block.active { border-color: rgba(78,205,196,0.9); background: rgba(78,205,196,0.2); box-shadow: 0 0 16px rgba(78,205,196,0.3); }
+  .arch-block.expert-block.inactive { opacity: 0.3; }
+  .arch-block.combine-block { border-color: rgba(255,107,107,0.5); color: #ff9999; background: rgba(255,107,107,0.1); }
+  .arch-block.output-block  { border-color: rgba(108,99,255,0.5); color: #a09af5; background: rgba(108,99,255,0.1); }
+  .arch-arrow {
+    text-align: center;
+    color: var(--muted);
+    font-size: 18px;
+    margin: 4px 0;
+  }
+  .arch-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    text-align: center;
+    letter-spacing: 0.1em;
+    margin: 4px 0 10px;
+  }
+
+  /* ── MATH BOX ───────────────────────────────── */
+  .math-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 24px 28px;
+    margin: 24px 0;
+  }
+  .math-box .math-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .math-box .formula {
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--text);
+    line-height: 2.0;
+  }
+  .math-box .formula .var-purple { color: #a09af5; }
+  .math-box .formula .var-teal   { color: #7ee8e3; }
+  .math-box .formula .var-orange { color: #f7c06a; }
+  .math-box .formula .var-red    { color: #ff9999; }
+  .math-box .explanation {
+    margin-top: 16px;
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.8;
+  }
+
+  /* ── CODE BLOCK ─────────────────────────────── */
+  .code-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 24px 0;
+  }
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .code-dots { display: flex; gap: 6px; }
+  .code-dots span {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: block;
+  }
+  .dot-r { background: #ff5f57; }
+  .dot-y { background: #febc2e; }
+  .dot-g { background: #28c840; }
+  .code-filename {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+  .code-copy {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .code-copy:hover { color: var(--accent); border-color: var(--accent); }
+  pre {
+    margin: 0;
+    padding: 24px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.75;
+    color: var(--text);
+  }
+  .kw  { color: #7c6af5; }
+  .fn  { color: #7ee8e3; }
+  .str { color: #f7c06a; }
+  .cm  { color: #4b5563; font-style: italic; }
+  .num { color: #ff9999; }
+  .cls { color: #f97316; }
+
+  /* ── COMPARISON TABLE ───────────────────────── */
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .compare-table th {
+    background: var(--surface2);
+    padding: 14px 20px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .compare-table td {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    line-height: 1.6;
+    vertical-align: top;
+  }
+  .compare-table tr:last-child td { border-bottom: none; }
+  .compare-table tr:hover td { background: var(--surface2); }
+  .tag { font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 3px; }
+  .tag-green { background: rgba(78,205,196,0.15); color: var(--accent3); }
+  .tag-red   { background: rgba(255,107,107,0.15); color: var(--accent4); }
+  .tag-yellow { background: rgba(245,166,35,0.15); color: var(--accent2); }
+
+  /* ── INTERACTIVE ROUTER DEMO ────────────────── */
+  .demo-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px;
+    margin: 24px 0;
+  }
+  .demo-title {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 24px;
+  }
+  .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  @media (max-width: 640px) { .demo-grid { grid-template-columns: 1fr; } }
+  .input-area {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .demo-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .demo-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+    resize: none;
+  }
+  .demo-input:focus { border-color: var(--accent); }
+  .demo-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  .demo-btn:hover { opacity: 0.85; }
+  .demo-btn:active { transform: scale(0.98); }
+  .expert-panels {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .expert-bar-wrap { display: flex; align-items: center; gap: 12px; }
+  .expert-name {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    width: 100px;
+    flex-shrink: 0;
+  }
+  .expert-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--surface2);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .expert-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+    background: var(--accent3);
+  }
+  .expert-bar-fill.top { background: var(--accent); }
+  .expert-score {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    width: 38px;
+    text-align: right;
+  }
+
+  /* ── ADVANTAGES GRID ────────────────────────── */
+  .adv-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 20px;
+  }
+  .adv-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s;
+  }
+  .adv-card:hover { transform: translateY(-4px); }
+  .adv-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .adv-card.c1::before { background: linear-gradient(90deg, var(--accent), var(--accent3)); }
+  .adv-card.c2::before { background: linear-gradient(90deg, var(--accent3), var(--accent2)); }
+  .adv-card.c3::before { background: linear-gradient(90deg, var(--accent2), var(--accent4)); }
+  .adv-card.c4::before { background: linear-gradient(90deg, var(--accent4), var(--accent)); }
+  .adv-card.c5::before { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .adv-card.c6::before { background: linear-gradient(90deg, var(--accent3), var(--accent)); }
+  .adv-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+  .adv-card h3 {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+  .adv-card p {
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.75;
+  }
+
+  /* ── TRAINING PIPELINE ──────────────────────── */
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    position: relative;
+    padding-left: 32px;
+  }
+  .pipeline::before {
+    content: '';
+    position: absolute;
+    left: 8px; top: 20px; bottom: 20px;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--accent), var(--accent3), var(--accent2));
+  }
+  .pipeline-step {
+    display: flex;
+    gap: 24px;
+    padding: 28px 0;
+    position: relative;
+  }
+  .pipeline-dot {
+    position: absolute;
+    left: -28px;
+    top: 32px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 2px solid;
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+  .dot-accent  { border-color: var(--accent); }
+  .dot-teal    { border-color: var(--accent3); }
+  .dot-orange  { border-color: var(--accent2); }
+  .dot-red     { border-color: var(--accent4); }
+  .pipeline-content {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    flex: 1;
+    transition: border-color 0.3s;
+  }
+  .pipeline-content:hover { border-color: var(--accent); }
+  .pipeline-content h3 {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .pipeline-content p {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  /* ── MODELS TABLE ───────────────────────────── */
+  .model-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .model-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    transition: border-color 0.3s, transform 0.3s;
+  }
+  .model-card:hover { border-color: var(--accent2); transform: translateY(-3px); }
+  .model-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .model-org {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent2);
+    letter-spacing: 0.1em;
+    margin-bottom: 14px;
+    text-transform: uppercase;
+  }
+  .model-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .model-stat-key { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .model-stat-val { color: var(--text); font-family: var(--mono); font-size: 12px; font-weight: 600; }
+
+  /* ── FOOTER ─────────────────────────────────── */
+  footer {
+    text-align: center;
+    padding: 60px 24px;
+    border-top: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+  footer span { color: var(--accent); }
+
+  /* ── SCROLLBAR ──────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+  /* ── UTILS ──────────────────────────────────── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+  .mono { font-family: var(--mono); }
+  .accent { color: var(--accent); }
+  .teal   { color: var(--accent3); }
+  .orange { color: var(--accent2); }
+  .mt-32 { margin-top: 32px; }
+  .mb-8  { margin-bottom: 8px; }
+  strong { color: var(--text); font-weight: 600; }
+  .note {
+    background: rgba(108,99,255,0.08);
+    border: 1px solid rgba(108,99,255,0.2);
+    border-radius: 8px;
+    padding: 16px 20px;
+    font-size: 13.5px;
+    color: var(--muted);
+    margin: 20px 0;
+  }
+  .note strong { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════ HERO ═══════════════════════════ -->
+<section class="hero" id="hero">
+  <div class="hero-eyebrow">Chapter 5 · Transformer Architecture Series</div>
+  <h1>Mixture of<br><span class="highlight">Experts</span></h1>
+  <p class="hero-sub">
+    How sparse routing transforms static neural networks into dynamic, scalable intelligence—
+    scaling parameters without scaling compute.
+  </p>
+  <div class="hero-badges">
+    <span class="badge badge-purple">Sparse Routing</span>
+    <span class="badge badge-teal">Top-K Gating</span>
+    <span class="badge badge-orange">Load Balancing</span>
+    <span class="badge badge-red">Expert Parallelism</span>
+    <span class="badge badge-purple">Switch Transformer</span>
+    <span class="badge badge-teal">Mixtral · DeepSeek</span>
+  </div>
+
+  <!-- Live Routing Canvas -->
+  <div class="router-viz">
+    <canvas id="routerCanvas"></canvas>
+  </div>
+</section>
+
+<!-- ══════════════════════ NAV ════════════════════════════ -->
+<nav class="chapter-nav">
+  <a class="nav-item" href="#intuition">Intuition</a>
+  <a class="nav-item" href="#architecture">Architecture</a>
+  <a class="nav-item" href="#math">Math</a>
+  <a class="nav-item" href="#advantages">Advantages</a>
+  <a class="nav-item" href="#challenges">Challenges</a>
+  <a class="nav-item" href="#demo">Live Demo</a>
+  <a class="nav-item" href="#training">Training</a>
+  <a class="nav-item" href="#implementation">Code</a>
+  <a class="nav-item" href="#models">Real Models</a>
+</nav>
+
+<!-- ══════════════════════ INTUITION ═══════════════════════ -->
+<div class="divider"></div>
+<section class="section" id="intuition">
+  <div class="section-label reveal">§01 — Core Idea</div>
+  <h2 class="section-title reveal">Not every token needs<br>every neuron.</h2>
+  <p class="section-intro reveal">
+    A dense transformer layer activates <em>all</em> its parameters for every token. MoE asks:
+    what if we had many specialized sub-networks, and each token only visited the ones most
+    relevant to it? Massive capacity, surgical compute.
+  </p>
+
+  <div class="card-grid">
+    <div class="card reveal">
+      <div class="card-icon" style="background:rgba(108,99,255,0.15);">🧠</div>
+      <h3>The Expert Analogy</h3>
+      <p>Like a hospital with specialist doctors — a patient (token) sees only the relevant specialist (expert), not every doctor on staff. Each expert becomes deeply specialized through repeated exposure to similar inputs.</p>
+    </div>
+    <div class="card reveal">
+      <div class="card-icon" style="background:rgba(78,205,196,0.15);">🔀</div>
+      <h3>The Router / Gating Network</h3>
+      <p>A lightweight learned function that sees each token's embedding and decides which experts should handle it. Usually a simple linear layer followed by softmax, outputting a probability distribution over all experts.</p>
+    </div>
+    <div class="card reveal">
+      <div class="card-icon" style="background:rgba(245,166,35,0.15);">⚡</div>
+      <h3>Sparse Activation</h3>
+      <p>Only Top-K experts (usually K=1 or K=2) are activated per token. With 64 experts and K=2, only 3.1% of expert parameters fire for any single token — massive parameter counts, fixed compute budget.</p>
+    </div>
+    <div class="card reveal">
+      <div class="card-icon" style="background:rgba(255,107,107,0.15);">🏗️</div>
+      <h3>Where It Lives</h3>
+      <p>MoE replaces the FFN (Feed-Forward Network) sub-layer in a Transformer block. The attention sub-layer remains dense and shared. Each expert is itself a standard FFN (two linear layers + activation).</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ ARCHITECTURE ════════════════════ -->
+<div class="divider"></div>
+<section class="section" id="architecture">
+  <div class="section-label reveal">§02 — Architecture</div>
+  <h2 class="section-title reveal">Inside an MoE Layer</h2>
+  <p class="section-intro reveal">
+    An MoE Transformer block is identical to a standard Transformer except that the single FFN
+    is replaced with N expert FFNs plus a gating network. Everything else — attention, residuals, layer norm — stays the same.
+  </p>
+
+  <!-- Annotated Architecture Block -->
+  <div class="arch-diagram reveal">
+    <div class="arch-label" style="color:var(--muted);">TOKEN EMBEDDING — x ∈ ℝᵈ</div>
+    <div class="arch-row">
+      <div class="arch-block input-block">Token x_t</div>
+    </div>
+    <div class="arch-arrow">↓</div>
+    <div class="arch-label" style="color:var(--muted);">MULTI-HEAD ATTENTION (shared, dense)</div>
+    <div class="arch-row">
+      <div class="arch-block" style="min-width:220px; border-color:rgba(108,99,255,0.3); color:#a09af5; background:rgba(108,99,255,0.08);">
+        Multi-Head Self-Attention
+      </div>
+    </div>
+    <div class="arch-arrow">↓ Add & Norm ↓</div>
+    <div class="arch-label" style="color:var(--accent2);">GATING NETWORK — decides expert routing</div>
+    <div class="arch-row">
+      <div class="arch-block router-block" style="min-width:220px;">
+        Router: G(x) = Softmax(W_r · x + noise)
+      </div>
+    </div>
+    <div class="arch-arrow">↓ Top-K selection ↓</div>
+    <div class="arch-label" style="color:var(--accent3);">EXPERT FFN POOL — only K fire per token</div>
+    <div class="arch-row" id="expertRow">
+      <div class="arch-block expert-block" id="e0">Expert 0</div>
+      <div class="arch-block expert-block" id="e1">Expert 1</div>
+      <div class="arch-block expert-block" id="e2">Expert 2</div>
+      <div class="arch-block expert-block" id="e3">Expert 3</div>
+      <div class="arch-block expert-block" id="e4">Expert 4</div>
+      <div class="arch-block expert-block" id="e5">Expert 5</div>
+      <div class="arch-block expert-block" id="e6">Expert 6</div>
+      <div class="arch-block expert-block" id="e7">Expert 7</div>
+    </div>
+    <div class="arch-arrow">↓ Weighted sum ↓</div>
+    <div class="arch-label" style="color:var(--accent4);">COMBINE — weighted output mix</div>
+    <div class="arch-row">
+      <div class="arch-block combine-block" style="min-width:260px;">
+        y = Σ g_i(x) · FFN_i(x)  for i ∈ TopK
+      </div>
+    </div>
+    <div class="arch-arrow">↓ Add & Norm ↓</div>
+    <div class="arch-row">
+      <div class="arch-block output-block">Output y_t</div>
+    </div>
+    <p style="text-align:center; font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:20px;">
+      ↻ Experts flash every 2s showing random K=2 activation
+    </p>
+  </div>
+
+  <!-- Dense vs Sparse side by side -->
+  <div class="two-col mt-32">
+    <div class="reveal-left">
+      <div class="math-box">
+        <div class="math-label">Dense FFN Layer</div>
+        <div class="formula">
+          <span class="var-teal">y</span> = FFN(<span class="var-purple">x</span>)<br>
+          <span class="var-teal">y</span> = W₂ · σ(W₁ · <span class="var-purple">x</span>)<br><br>
+          Params active: <span class="var-red">100%</span><br>
+          FLOPs per token: <span class="var-red">~2 · d · d_ff</span>
+        </div>
+        <div class="explanation">Every token activates the full FFN. Scaling means paying for compute on every forward pass.</div>
+      </div>
+    </div>
+    <div class="reveal-right">
+      <div class="math-box" style="border-left-color:var(--accent3);">
+        <div class="math-label" style="color:var(--accent3);">MoE Layer (K=2, N experts)</div>
+        <div class="formula">
+          <span class="var-teal">y</span> = Σᵢ <span class="var-orange">g_i</span>(<span class="var-purple">x</span>) · FFNᵢ(<span class="var-purple">x</span>)<br>
+          <span class="var-orange">g</span> = Softmax(TopK(W_r · <span class="var-purple">x</span>))<br><br>
+          Params active: <span class="var-teal">K/N ×</span><br>
+          FLOPs per token: <span class="var-teal">~same as K dense FFNs</span>
+        </div>
+        <div class="explanation">Token sees only K experts. Total parameters scale with N, but inference cost stays fixed at K experts.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ MATH ═════════════════════════ -->
+<div class="divider"></div>
+<section class="section" id="math">
+  <div class="section-label reveal">§03 — Mathematics</div>
+  <h2 class="section-title reveal">The Routing Equations</h2>
+  <p class="section-intro reveal">
+    MoE math is elegant: a learned linear gate, a softmax-with-noise, Top-K selection, and
+    a weighted sum. The devil is in the auxiliary loss that keeps experts from collapsing.
+  </p>
+
+  <div class="math-box reveal">
+    <div class="math-label">Step 1 — Gating Logits</div>
+    <div class="formula">
+      H(<span class="var-purple">x</span>) = <span class="var-purple">x</span> · W_gate + 
+      StandardNormal() · Softplus(x · W_noise)
+    </div>
+    <div class="explanation">
+      <strong>W_gate</strong> (d_model × N_experts) is the learnable routing matrix. 
+      The noise term — used in Switch Transformer and GShard — adds randomness during training for better expert exploration. W_noise is also learned. At inference, noise is typically disabled.
+    </div>
+  </div>
+
+  <div class="math-box reveal">
+    <div class="math-label">Step 2 — Top-K Selection & Gating Weights</div>
+    <div class="formula">
+      TopK(<span class="var-orange">H</span>, K) → keep K largest logits, set rest to <span class="var-red">-∞</span><br><br>
+      <span class="var-orange">G</span>(<span class="var-purple">x</span>) = Softmax(TopK(<span class="var-orange">H</span>(<span class="var-purple">x</span>), K))
+    </div>
+    <div class="explanation">
+      Setting non-selected logits to −∞ before softmax ensures they contribute exactly zero weight. This is how <strong>sparsity is enforced</strong> — a clean hard gate. The remaining K weights sum to 1.0, creating a convex combination of expert outputs.
+    </div>
+  </div>
+
+  <div class="math-box reveal">
+    <div class="math-label">Step 3 — Expert Computation & Weighted Sum</div>
+    <div class="formula">
+      <span class="var-teal">y</span> = Σᵢ₌₁ᴷ  <span class="var-orange">G</span>(<span class="var-purple">x</span>)ᵢ · FFNᵢ(<span class="var-purple">x</span>)<br><br>
+      FFNᵢ(<span class="var-purple">x</span>) = W₂ᵢ · GELU(W₁ᵢ · <span class="var-purple">x</span>)
+    </div>
+    <div class="explanation">
+      Each expert i is a full FFN with its own parameters (W₁ᵢ, W₂ᵢ). Only K=1 or K=2 are computed. The outputs are scaled by the gate weights and summed — a learned, input-dependent interpolation between specialist outputs.
+    </div>
+  </div>
+
+  <div class="math-box reveal" style="border-left-color:var(--accent4);">
+    <div class="math-label" style="color:var(--accent4);">Auxiliary Load-Balancing Loss</div>
+    <div class="formula">
+      L_aux = α · N · Σᵢ fᵢ · Pᵢ<br><br>
+      fᵢ = fraction of tokens routed to expert i<br>
+      Pᵢ = mean gating probability assigned to expert i
+    </div>
+    <div class="explanation">
+      Without this loss, the router collapses — it keeps sending all tokens to one expert (rich-get-richer). L_aux penalizes uneven distribution. α is a hyperparameter (typically 0.01–0.1). This is the most critical MoE-specific training detail.
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ ADVANTAGES ═════════════════════ -->
+<div class="divider"></div>
+<section class="section" id="advantages">
+  <div class="section-label reveal">§04 — Why MoE</div>
+  <h2 class="section-title reveal">The Case for Sparse Models</h2>
+  <p class="section-intro reveal">
+    MoE isn't a trick — it's a fundamental change in the <em>scaling law regime</em>.
+    More parameters per FLOP, better specialization, practical throughput at massive scale.
+  </p>
+
+  <div class="adv-grid">
+    <div class="adv-card c1 reveal">
+      <div class="adv-num">01</div>
+      <h3>Decoupled Parameter vs Compute Scaling</h3>
+      <p>You can 10× the parameters without 10× the FLOPs. Mixtral 8×7B has 46.7B total params but only 12.9B active per token — same compute as a 13B dense model with the capacity of a 47B model.</p>
+    </div>
+    <div class="adv-card c2 reveal">
+      <div class="adv-num">02</div>
+      <h3>Better Quality per FLOP</h3>
+      <p>Empirically, MoE models achieve lower perplexity at the same training FLOPs vs dense models. Switch Transformer matched or exceeded T5-11B quality using far fewer compute operations.</p>
+    </div>
+    <div class="adv-card c3 reveal">
+      <div class="adv-num">03</div>
+      <h3>Expert Specialization</h3>
+      <p>Experts develop interpretable specializations — some attend to syntax, others to semantics, domain-specific reasoning, or certain languages. This division of labor emerges naturally from training.</p>
+    </div>
+    <div class="adv-card c4 reveal">
+      <div class="adv-num">04</div>
+      <h3>Faster Training Throughput</h3>
+      <p>With expert parallelism across devices, each device hosts a subset of experts. Tokens are dispatched to the correct device, processed, and returned. This enables linear scaling of training throughput.</p>
+    </div>
+    <div class="adv-card c5 reveal">
+      <div class="adv-num">05</div>
+      <h3>Lower Inference Latency (per token)</h3>
+      <p>Since only K experts fire per token, latency is determined by active parameters, not total parameters. A 141B MoE model (DeepSeek-V3) can match the latency profile of a 20–30B dense model.</p>
+    </div>
+    <div class="adv-card c6 reveal">
+      <div class="adv-num">06</div>
+      <h3>Modular & Composable</h3>
+      <p>Experts can be pruned, merged, or swapped post-training. Research shows you can extract language-specific or domain-specific expert subsets and deploy lightweight specialist slices of a large MoE.</p>
+    </div>
+  </div>
+
+  <!-- Scaling comparison chart in canvas -->
+  <div class="demo-box mt-32 reveal">
+    <div class="demo-title">Parameter Efficiency — MoE vs Dense at Equal FLOPs</div>
+    <canvas id="scalingChart" style="width:100%; height:200px; display:block;"></canvas>
+  </div>
+</section>
+
+<!-- ══════════════════════ CHALLENGES ══════════════════════ -->
+<div class="divider"></div>
+<section class="section" id="challenges">
+  <div class="section-label reveal">§05 — Challenges</div>
+  <h2 class="section-title reveal">What Makes MoE Hard</h2>
+  <p class="section-intro reveal">
+    Sparse models trade one set of problems for another. The gains are real, but the engineering
+    and training challenges are significant. Here's what practitioners fight with:
+  </p>
+
+  <table class="compare-table reveal">
+    <thead>
+      <tr>
+        <th>Challenge</th>
+        <th>Root Cause</th>
+        <th>Common Solutions</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Expert Collapse</strong><br><span style="font-size:12px;color:var(--muted);">Router sends all tokens to 1–2 experts</span></td>
+        <td>Rich-get-richer dynamics in softmax gating</td>
+        <td>Auxiliary load-balancing loss, random routing at init, noise injection</td>
+        <td><span class="tag tag-yellow">Partially solved</span></td>
+      </tr>
+      <tr>
+        <td><strong>Memory Footprint</strong><br><span style="font-size:12px;color:var(--muted);">All experts must fit in device memory</span></td>
+        <td>Total parameter count is N× a dense layer</td>
+        <td>Expert parallelism, offloading, quantized experts (GPTQ/AWQ)</td>
+        <td><span class="tag tag-yellow">Manageable</span></td>
+      </tr>
+      <tr>
+        <td><strong>Communication Overhead</strong><br><span style="font-size:12px;color:var(--muted);">All-to-all dispatching between devices</span></td>
+        <td>Tokens must travel to their assigned expert's device</td>
+        <td>NVLink, expert co-location, capacity factor tuning, DeepSeek MLA</td>
+        <td><span class="tag tag-red">Active research</span></td>
+      </tr>
+      <tr>
+        <td><strong>Variable Batch Sizes</strong><br><span style="font-size:12px;color:var(--muted);">Uneven token distribution across experts</span></td>
+        <td>Discrete Top-K routing is inherently unbalanced</td>
+        <td>Expert capacity factor (drop or pad tokens), auxiliary loss</td>
+        <td><span class="tag tag-yellow">Partially solved</span></td>
+      </tr>
+      <tr>
+        <td><strong>Training Instability</strong><br><span style="font-size:12px;color:var(--muted);">Higher loss spikes vs dense models</span></td>
+        <td>Discrete routing creates non-smooth gradients</td>
+        <td>Careful LR schedules, router z-loss (PaLM-2), gradient clipping</td>
+        <td><span class="tag tag-yellow">Partially solved</span></td>
+      </tr>
+      <tr>
+        <td><strong>Fine-tuning Difficulty</strong><br><span style="font-size:12px;color:var(--muted);">Expert routing changes during SFT/RLHF</span></td>
+        <td>Router adapts, breaking pre-trained expert specializations</td>
+        <td>Frozen router fine-tuning, LoRA per expert, MoE-specific PEFT</td>
+        <td><span class="tag tag-red">Open problem</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════════ LIVE DEMO ═══════════════════════ -->
+<div class="divider"></div>
+<section class="section" id="demo">
+  <div class="section-label reveal">§06 — Interactive</div>
+  <h2 class="section-title reveal">Watch the Router Decide</h2>
+  <p class="section-intro reveal">
+    Type a token or phrase and simulate how a learned gating network distributes routing
+    probability across 8 experts. Each expert has a learned affinity for certain token types.
+  </p>
+
+  <div class="demo-box reveal">
+    <div class="demo-title">Interactive Routing Simulator · Top-K = 2</div>
+    <div class="demo-grid">
+      <div class="input-area">
+        <div class="demo-label">Enter a token / word</div>
+        <textarea class="demo-input" id="routerInput" rows="3" placeholder="Try: 'integral', 'def', 'Paris', 'love', 'GPU', 'the'..."></textarea>
+        <button class="demo-btn" onclick="simulateRouting()">Route Token →</button>
+        <div style="margin-top:16px; font-size:13px; color:var(--muted); line-height:1.7;">
+          <strong style="color:var(--accent);">Quick tokens:</strong><br>
+          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+            <span onclick="quickRoute('integral')" style="cursor:pointer; font-family:var(--mono); font-size:11px; padding:4px 10px; border:1px solid var(--border); border-radius:4px; color:var(--muted); transition:color 0.2s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">integral</span>
+            <span onclick="quickRoute('def add')" style="cursor:pointer; font-family:var(--mono); font-size:11px; padding:4px 10px; border:1px solid var(--border); border-radius:4px; color:var(--muted);" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">def add()</span>
+            <span onclick="quickRoute('Paris')" style="cursor:pointer; font-family:var(--mono); font-size:11px; padding:4px 10px; border:1px solid var(--border); border-radius:4px; color:var(--muted);" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">Paris</span>
+            <span onclick="quickRoute('love')" style="cursor:pointer; font-family:var(--mono); font-size:11px; padding:4px 10px; border:1px solid var(--border); border-radius:4px; color:var(--muted);" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">love</span>
+            <span onclick="quickRoute('the')" style="cursor:pointer; font-family:var(--mono); font-size:11px; padding:4px 10px; border:1px solid var(--border); border-radius:4px; color:var(--muted);" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">the</span>
+            <span onclick="quickRoute('GPU kernel')" style="cursor:pointer; font-family:var(--mono); font-size:11px; padding:4px 10px; border:1px solid var(--border); border-radius:4px; color:var(--muted);" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">GPU kernel</span>
+            <span onclick="quickRoute('Bonjour')" style="cursor:pointer; font-family:var(--mono); font-size:11px; padding:4px 10px; border:1px solid var(--border); border-radius:4px; color:var(--muted);" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">Bonjour</span>
+          </div>
+        </div>
+        <div id="routerOutput" style="margin-top:16px; font-family:var(--mono); font-size:12px; color:var(--muted); line-height:1.8;"></div>
+      </div>
+
+      <div>
+        <div class="demo-label" style="margin-bottom:16px;">Expert Routing Weights</div>
+        <div class="expert-panels" id="expertPanels"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ TRAINING ════════════════════════ -->
+<div class="divider"></div>
+<section class="section" id="training">
+  <div class="section-label reveal">§07 — Training</div>
+  <h2 class="section-title reveal">Training an MoE Model</h2>
+  <p class="section-intro reveal">
+    Training MoE requires careful orchestration of expert parallelism, gradient flow through
+    sparse operations, and auxiliary losses. Here's the full pipeline:
+  </p>
+
+  <div class="pipeline reveal">
+    <div class="pipeline-step">
+      <div class="pipeline-dot dot-accent"></div>
+      <div class="pipeline-content">
+        <h3>1. Expert Parallelism Setup</h3>
+        <p>Distribute experts across devices. With 64 experts across 8 GPUs, each GPU owns 8 experts. Data parallelism handles batch distribution while expert parallelism handles routing. Combine with tensor and pipeline parallelism for frontier-scale training.</p>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-dot dot-teal"></div>
+      <div class="pipeline-content">
+        <h3>2. All-to-All Dispatch</h3>
+        <p>After gating decisions, tokens must physically travel to the device hosting their chosen expert. This all-to-all communication is the main latency bottleneck. Each token carries its embedding vector across the interconnect.</p>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-dot dot-orange"></div>
+      <div class="pipeline-content">
+        <h3>3. Capacity Factor & Token Dropping</h3>
+        <p>Each expert has a capacity: max_tokens = (batch_size / N_experts) × capacity_factor. If more tokens arrive than capacity, overflow tokens are dropped (passed through with a residual connection). Capacity factor of 1.25–2.0 balances utilization vs waste.</p>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-dot dot-red"></div>
+      <div class="pipeline-content">
+        <h3>4. Expert Forward Pass + All-to-All Return</h3>
+        <p>Each device computes its experts' outputs for the tokens it received. Then a second all-to-all gathers results back to each token's origin device. Two all-to-all operations per MoE layer per forward pass.</p>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-dot dot-accent"></div>
+      <div class="pipeline-content">
+        <h3>5. Gradient Flow & Auxiliary Loss</h3>
+        <p>Gradients flow through the gating weights G(x) via straight-through estimators or dense gradient approximations. The auxiliary loss L_aux is added to the main language modeling loss with weight α, typically 0.01–0.1. Too high and it kills task performance; too low and experts collapse.</p>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-dot dot-teal"></div>
+      <div class="pipeline-content">
+        <h3>6. Router Z-Loss (PaLM-2 trick)</h3>
+        <p>Penalize large logit magnitudes in the router: L_z = (1/B) · Σ log²(Σⱼ exp(H(x)ⱼ)). Stabilizes training by preventing router logits from exploding, which would make the softmax near-deterministic and hard to optimize.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="note mt-32 reveal">
+    <strong>Key Insight:</strong> MoE models need more tokens to converge than equivalent dense models.
+    The router needs to learn meaningful specialization, which takes longer than learning a single FFN.
+    Researchers typically train MoE for 1.5–2× more steps than comparable dense baselines.
+  </div>
+</section>
+
+<!-- ══════════════════════ IMPLEMENTATION ══════════════════ -->
+<div class="divider"></div>
+<section class="section" id="implementation">
+  <div class="section-label reveal">§08 — Implementation</div>
+  <h2 class="section-title reveal">From Math to Code</h2>
+  <p class="section-intro reveal">
+    A complete PyTorch MoE implementation from scratch: the gating network, expert pool,
+    load balancing loss, and integration into a Transformer block.
+  </p>
+
+  <!-- Code: MoE Router -->
+  <div class="code-wrap reveal">
+    <div class="code-header">
+      <div class="code-dots"><span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span></div>
+      <span class="code-filename">moe_router.py — Gating Network</span>
+      <button class="code-copy" onclick="copyCode(this)">Copy</button>
+    </div>
+    <pre><span class="kw">import</span> torch
+<span class="kw">import</span> torch.nn <span class="kw">as</span> nn
+<span class="kw">import</span> torch.nn.functional <span class="kw">as</span> F
+<span class="kw">from</span> typing <span class="kw">import</span> Tuple
+
+<span class="kw">class</span> <span class="cls">MoERouter</span>(nn.Module):
+    <span class="str">"""
+    Learned gating network for Mixture of Experts.
+    Produces Top-K sparse gate weights for a batch of tokens.
+    """</span>
+    <span class="kw">def</span> <span class="fn">__init__</span>(
+        self,
+        d_model: int,        <span class="cm"># Input embedding dimension</span>
+        n_experts: int,      <span class="cm"># Total number of experts</span>
+        top_k: int = <span class="num">2</span>,      <span class="cm"># Experts activated per token</span>
+        noise_std: float = <span class="num">1.0</span>,  <span class="cm"># Noisy top-k exploration noise</span>
+    ):
+        <span class="fn">super</span>().__init__()
+        self.n_experts = n_experts
+        self.top_k = top_k
+        self.noise_std = noise_std
+
+        <span class="cm"># Core routing linear: maps d_model → n_experts logits</span>
+        self.gate = nn.Linear(d_model, n_experts, bias=<span class="kw">False</span>)
+
+        <span class="cm"># Learned noise scale (Noisy Top-K from Shazeer et al. 2017)</span>
+        self.noise_scale = nn.Linear(d_model, n_experts, bias=<span class="kw">False</span>)
+
+    <span class="kw">def</span> <span class="fn">forward</span>(
+        self,
+        x: torch.Tensor,           <span class="cm"># (batch, seq_len, d_model)</span>
+        training: bool = <span class="kw">True</span>,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        <span class="str">"""
+        Returns:
+            dispatch_weights  (B, S, top_k)  — softmaxed gate scores
+            expert_indices    (B, S, top_k)  — which experts are chosen
+            router_logits     (B, S, n_experts) — raw logits for aux loss
+        """</span>
+        B, S, D = x.shape
+
+        <span class="cm"># Raw logits</span>
+        logits = self.gate(x)  <span class="cm"># (B, S, n_experts)</span>
+
+        <span class="cm"># Add multiplicative noise during training for exploration</span>
+        <span class="kw">if</span> training <span class="kw">and</span> self.noise_std > <span class="num">0</span>:
+            noise = torch.randn_like(logits)
+            noise_scale = F.softplus(self.noise_scale(x))
+            logits = logits + noise * noise_scale * self.noise_std
+
+        <span class="cm"># Top-K selection: zero out all but top_k logits</span>
+        top_k_logits, top_k_indices = torch.topk(
+            logits, self.top_k, dim=-<span class="num">1</span>
+        )  <span class="cm"># both: (B, S, top_k)</span>
+
+        <span class="cm"># Softmax ONLY over the top-k slots — sparse gating weights</span>
+        dispatch_weights = F.softmax(top_k_logits, dim=-<span class="num">1</span>)
+
+        <span class="kw">return</span> dispatch_weights, top_k_indices, logits
+
+
+<span class="kw">def</span> <span class="fn">load_balancing_loss</span>(
+    router_logits: torch.Tensor,    <span class="cm"># (B, S, n_experts) raw logits</span>
+    expert_indices: torch.Tensor,   <span class="cm"># (B, S, top_k)</span>
+    n_experts: int,
+    alpha: float = <span class="num">0.01</span>,
+) -> torch.Tensor:
+    <span class="str">"""
+    Auxiliary loss from Switch Transformer.
+    Encourages uniform distribution of tokens across experts.
+    L = alpha * N * sum(f_i * P_i)
+    """</span>
+    B, S, n_e = router_logits.shape
+    n_tokens = B * S
+
+    <span class="cm"># f_i: fraction of tokens assigned to each expert</span>
+    flat_indices = expert_indices.reshape(-<span class="num">1</span>, expert_indices.shape[-<span class="num">1</span>])
+    token_counts = torch.zeros(n_experts, device=router_logits.device)
+    <span class="kw">for</span> k <span class="kw">in</span> range(expert_indices.shape[-<span class="num">1</span>]):
+        token_counts.scatter_add_(
+            <span class="num">0</span>, flat_indices[:, k],
+            torch.ones(n_tokens, device=router_logits.device)
+        )
+    f_i = token_counts / (n_tokens * expert_indices.shape[-<span class="num">1</span>])
+
+    <span class="cm"># P_i: mean gating probability for each expert</span>
+    router_probs = F.softmax(router_logits, dim=-<span class="num">1</span>)  <span class="cm"># (B,S,N)</span>
+    P_i = router_probs.mean(dim=[<span class="num">0</span>, <span class="num">1</span>])              <span class="cm"># (N,)</span>
+
+    loss = alpha * n_experts * (f_i * P_i).sum()
+    <span class="kw">return</span> loss</pre>
+  </div>
+
+  <!-- Code: Expert Pool -->
+  <div class="code-wrap reveal">
+    <div class="code-header">
+      <div class="code-dots"><span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span></div>
+      <span class="code-filename">moe_experts.py — Expert Pool & MoE Layer</span>
+      <button class="code-copy" onclick="copyCode(this)">Copy</button>
+    </div>
+    <pre><span class="kw">class</span> <span class="cls">Expert</span>(nn.Module):
+    <span class="str">"""Single FFN expert with SwiGLU activation (used in Mixtral/LLaMA)."""</span>
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, d_model: int, d_ff: int, dropout: float = <span class="num">0.0</span>):
+        <span class="fn">super</span>().__init__()
+        self.w1 = nn.Linear(d_model, d_ff, bias=<span class="kw">False</span>)   <span class="cm"># gate proj</span>
+        self.w2 = nn.Linear(d_ff, d_model, bias=<span class="kw">False</span>)   <span class="cm"># down proj</span>
+        self.w3 = nn.Linear(d_model, d_ff, bias=<span class="kw">False</span>)   <span class="cm"># up proj</span>
+        self.dropout = nn.Dropout(dropout)
+
+    <span class="kw">def</span> <span class="fn">forward</span>(self, x: torch.Tensor) -> torch.Tensor:
+        <span class="cm"># SwiGLU: swish(gate) * up, then project down</span>
+        gate = F.silu(self.w1(x))
+        up   = self.w3(x)
+        <span class="kw">return</span> self.dropout(self.w2(gate * up))
+
+
+<span class="kw">class</span> <span class="cls">MoELayer</span>(nn.Module):
+    <span class="str">"""
+    Full Mixture-of-Experts layer replacing the FFN in a Transformer block.
+    Supports efficient batched expert computation.
+    """</span>
+    <span class="kw">def</span> <span class="fn">__init__</span>(
+        self,
+        d_model: int,
+        d_ff: int,
+        n_experts: int = <span class="num">8</span>,
+        top_k: int = <span class="num">2</span>,
+        dropout: float = <span class="num">0.0</span>,
+    ):
+        <span class="fn">super</span>().__init__()
+        self.n_experts = n_experts
+        self.top_k = top_k
+
+        self.router = <span class="cls">MoERouter</span>(d_model, n_experts, top_k)
+        self.experts = nn.ModuleList([
+            <span class="cls">Expert</span>(d_model, d_ff, dropout) <span class="kw">for</span> _ <span class="kw">in</span> range(n_experts)
+        ])
+
+    <span class="kw">def</span> <span class="fn">forward</span>(
+        self,
+        x: torch.Tensor,         <span class="cm"># (B, S, D)</span>
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        B, S, D = x.shape
+
+        <span class="cm"># 1. Get routing decisions</span>
+        weights, indices, logits = self.router(x, self.training)
+        <span class="cm"># weights: (B, S, K), indices: (B, S, K)</span>
+
+        <span class="cm"># 2. Flatten tokens for batched expert dispatch</span>
+        x_flat     = x.reshape(B * S, D)                       <span class="cm"># (B*S, D)</span>
+        idx_flat   = indices.reshape(B * S, self.top_k)        <span class="cm"># (B*S, K)</span>
+        wts_flat   = weights.reshape(B * S, self.top_k)        <span class="cm"># (B*S, K)</span>
+
+        output = torch.zeros_like(x_flat)                       <span class="cm"># (B*S, D)</span>
+
+        <span class="cm"># 3. Iterate over top-k slots (efficient for small K)</span>
+        <span class="kw">for</span> k <span class="kw">in</span> range(self.top_k):
+            expert_ids = idx_flat[:, k]    <span class="cm"># (B*S,)</span>
+            expert_wts = wts_flat[:, k]    <span class="cm"># (B*S,)</span>
+
+            <span class="cm"># Group tokens by their expert assignment</span>
+            <span class="kw">for</span> e <span class="kw">in</span> range(self.n_experts):
+                mask = (expert_ids == e)           <span class="cm"># boolean mask</span>
+                <span class="kw">if</span> mask.sum() == <span class="num">0</span>:
+                    <span class="kw">continue</span>
+                expert_input  = x_flat[mask]       <span class="cm"># tokens for this expert</span>
+                expert_output = self.experts[e](expert_input)
+                output[mask] += expert_wts[mask].unsqueeze(-<span class="num">1</span>) * expert_output
+
+        output = output.reshape(B, S, D)
+
+        <span class="cm"># 4. Compute auxiliary loss</span>
+        aux = <span class="fn">load_balancing_loss</span>(logits, indices, self.n_experts)
+
+        <span class="kw">return</span> output, aux</pre>
+  </div>
+
+  <!-- Code: Full Transformer Block -->
+  <div class="code-wrap reveal">
+    <div class="code-header">
+      <div class="code-dots"><span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span></div>
+      <span class="code-filename">moe_transformer_block.py — Full Block + Training Loop</span>
+      <button class="code-copy" onclick="copyCode(this)">Copy</button>
+    </div>
+    <pre><span class="kw">class</span> <span class="cls">MoETransformerBlock</span>(nn.Module):
+    <span class="str">"""
+    Standard Transformer block with MoE FFN sublayer.
+    Collects auxiliary losses during forward pass.
+    """</span>
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, d_model: int, n_heads: int, d_ff: int,
+                 n_experts: int = <span class="num">8</span>, top_k: int = <span class="num">2</span>):
+        <span class="fn">super</span>().__init__()
+        self.norm1  = nn.RMSNorm(d_model)
+        self.norm2  = nn.RMSNorm(d_model)
+        self.attn   = nn.MultiheadAttention(d_model, n_heads, batch_first=<span class="kw">True</span>)
+        self.moe    = <span class="cls">MoELayer</span>(d_model, d_ff, n_experts, top_k)
+
+    <span class="kw">def</span> <span class="fn">forward</span>(self, x, attn_mask=<span class="kw">None</span>):
+        <span class="cm"># Attention sub-layer (dense, shared across all tokens)</span>
+        normed = self.norm1(x)
+        attn_out, _ = self.attn(normed, normed, normed, attn_mask=attn_mask)
+        x = x + attn_out
+
+        <span class="cm"># MoE FFN sub-layer (sparse, per-token routing)</span>
+        normed = self.norm2(x)
+        moe_out, aux_loss = self.moe(normed)
+        x = x + moe_out
+
+        <span class="kw">return</span> x, aux_loss
+
+
+<span class="cm"># ── Training Loop ──────────────────────────────────────────────</span>
+<span class="kw">def</span> <span class="fn">train_step</span>(model, batch, optimizer, aux_weight=<span class="num">0.01</span>):
+    optimizer.zero_grad()
+
+    tokens, labels = batch
+    logits, aux_losses = model(tokens)    <span class="cm"># model aggregates aux from all blocks</span>
+
+    <span class="cm"># Language modeling loss</span>
+    lm_loss = F.cross_entropy(
+        logits.view(-<span class="num">1</span>, logits.size(-<span class="num">1</span>)),
+        labels.view(-<span class="num">1</span>),
+        ignore_index=-<span class="num">100</span>
+    )
+
+    <span class="cm"># Total loss: task loss + scaled sum of per-layer aux losses</span>
+    total_loss = lm_loss + aux_weight * <span class="fn">sum</span>(aux_losses)
+
+    total_loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), <span class="num">1.0</span>)
+    optimizer.step()
+
+    <span class="kw">return</span> {
+        <span class="str">"lm_loss"</span>: lm_loss.item(),
+        <span class="str">"aux_loss"</span>: <span class="fn">sum</span>(l.item() <span class="kw">for</span> l <span class="kw">in</span> aux_losses),
+        <span class="str">"total"</span>: total_loss.item(),
+    }</pre>
+  </div>
+
+  <!-- Code: Hugging Face Mixtral usage -->
+  <div class="code-wrap reveal">
+    <div class="code-header">
+      <div class="code-dots"><span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span></div>
+      <span class="code-filename">mixtral_inference.py — Using HuggingFace Mixtral / DeepSeek</span>
+      <button class="code-copy" onclick="copyCode(this)">Copy</button>
+    </div>
+    <pre><span class="kw">from</span> transformers <span class="kw">import</span> AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+<span class="kw">import</span> torch
+
+<span class="cm"># ── Load Mixtral 8×7B (4-bit quantized — fits in ~24GB VRAM) ──</span>
+model_id = <span class="str">"mistralai/Mixtral-8x7B-Instruct-v0.1"</span>
+
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=<span class="kw">True</span>,
+    bnb_4bit_quant_type=<span class="str">"nf4"</span>,
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_use_double_quant=<span class="kw">True</span>,
+)
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model     = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    quantization_config=bnb_config,
+    device_map=<span class="str">"auto"</span>,
+    trust_remote_code=<span class="kw">True</span>,
+)
+
+<span class="cm"># ── Inspect router decisions ────────────────────────────────────</span>
+<span class="cm"># Mixtral's MoE layers are at: model.model.layers[i].block_sparse_moe</span>
+moe_layer = model.model.layers[<span class="num">0</span>].block_sparse_moe
+<span class="kw">print</span>(f<span class="str">"n_experts : {moe_layer.num_experts}"</span>)        <span class="cm"># 8</span>
+<span class="kw">print</span>(f<span class="str">"top_k     : {moe_layer.top_k}"</span>)              <span class="cm"># 2</span>
+
+<span class="cm"># ── Hook to capture routing decisions ──────────────────────────</span>
+routing_log = []
+
+<span class="kw">def</span> <span class="fn">routing_hook</span>(module, input, output):
+    <span class="cm"># output[1] = router logits in HF Mixtral</span>
+    routing_log.append(output[<span class="num">1</span>].detach().cpu())
+
+hook = moe_layer.register_forward_hook(routing_hook)
+
+<span class="cm"># ── Run inference ──────────────────────────────────────────────</span>
+prompt = <span class="str">"Explain how backpropagation works through an MoE layer."</span>
+inputs = tokenizer(prompt, return_tensors=<span class="str">"pt"</span>).to(<span class="str">"cuda"</span>)
+
+<span class="kw">with</span> torch.no_grad():
+    output = model.generate(**inputs, max_new_tokens=<span class="num">200</span>, temperature=<span class="num">0.7</span>)
+
+hook.remove()
+<span class="kw">print</span>(tokenizer.decode(output[<span class="num">0</span>], skip_special_tokens=<span class="kw">True</span>))
+
+<span class="cm"># ── Fine-tune with LoRA (per-expert adapters) ──────────────────</span>
+<span class="kw">from</span> peft <span class="kw">import</span> LoraConfig, get_peft_model, TaskType
+
+lora_config = LoraConfig(
+    task_type=TaskType.CAUSAL_LM,
+    r=<span class="num">16</span>,
+    lora_alpha=<span class="num">32</span>,
+    target_modules=[
+        <span class="str">"q_proj"</span>, <span class="str">"k_proj"</span>, <span class="str">"v_proj"</span>, <span class="str">"o_proj"</span>,
+        <span class="str">"w1"</span>, <span class="str">"w2"</span>, <span class="str">"w3"</span>,  <span class="cm"># Target all expert FFN layers</span>
+    ],
+    lora_dropout=<span class="num">0.05</span>,
+    bias=<span class="str">"none"</span>,
+)
+peft_model = get_peft_model(model, lora_config)
+peft_model.print_trainable_parameters()
+<span class="cm"># trainable params: ~85M | total: 46.7B | trainable%: 0.18%</span></pre>
+  </div>
+</section>
+
+<!-- ══════════════════════ REAL MODELS ═════════════════════ -->
+<div class="divider"></div>
+<section class="section" id="models">
+  <div class="section-label reveal">§09 — Production Models</div>
+  <h2 class="section-title reveal">MoE in the Wild</h2>
+  <p class="section-intro reveal">
+    MoE has gone from research curiosity to the dominant architecture for frontier LLMs.
+    Every major lab now runs sparse models at scale.
+  </p>
+
+  <div class="model-cards">
+    <div class="model-card reveal">
+      <div class="model-name">Switch Transformer</div>
+      <div class="model-org">Google Brain · 2021</div>
+      <div class="model-stat"><span class="model-stat-key">Total Params</span><span class="model-stat-val">1.6T</span></div>
+      <div class="model-stat"><span class="model-stat-key">Experts</span><span class="model-stat-val">2048</span></div>
+      <div class="model-stat"><span class="model-stat-key">Top-K</span><span class="model-stat-val">1</span></div>
+      <div class="model-stat"><span class="model-stat-key">Innovation</span><span class="model-stat-val">Top-1 gating</span></div>
+    </div>
+    <div class="model-card reveal">
+      <div class="model-name">GLaM</div>
+      <div class="model-org">Google · 2021</div>
+      <div class="model-stat"><span class="model-stat-key">Total Params</span><span class="model-stat-val">1.2T</span></div>
+      <div class="model-stat"><span class="model-stat-key">Experts</span><span class="model-stat-val">64</span></div>
+      <div class="model-stat"><span class="model-stat-key">Top-K</span><span class="model-stat-val">2</span></div>
+      <div class="model-stat"><span class="model-stat-key">Innovation</span><span class="model-stat-val">MoE every other layer</span></div>
+    </div>
+    <div class="model-card reveal">
+      <div class="model-name">Mixtral 8×7B</div>
+      <div class="model-org">Mistral AI · 2024</div>
+      <div class="model-stat"><span class="model-stat-key">Total Params</span><span class="model-stat-val">46.7B</span></div>
+      <div class="model-stat"><span class="model-stat-key">Active Params</span><span class="model-stat-val">12.9B</span></div>
+      <div class="model-stat"><span class="model-stat-key">Experts</span><span class="model-stat-val">8</span></div>
+      <div class="model-stat"><span class="model-stat-key">Top-K</span><span class="model-stat-val">2</span></div>
+    </div>
+    <div class="model-card reveal">
+      <div class="model-name">Mixtral 8×22B</div>
+      <div class="model-org">Mistral AI · 2024</div>
+      <div class="model-stat"><span class="model-stat-key">Total Params</span><span class="model-stat-val">141B</span></div>
+      <div class="model-stat"><span class="model-stat-key">Active Params</span><span class="model-stat-val">~39B</span></div>
+      <div class="model-stat"><span class="model-stat-key">Experts</span><span class="model-stat-val">8</span></div>
+      <div class="model-stat"><span class="model-stat-key">Top-K</span><span class="model-stat-val">2</span></div>
+    </div>
+    <div class="model-card reveal">
+      <div class="model-name">DeepSeek-V2</div>
+      <div class="model-org">DeepSeek · 2024</div>
+      <div class="model-stat"><span class="model-stat-key">Total Params</span><span class="model-stat-val">236B</span></div>
+      <div class="model-stat"><span class="model-stat-key">Active Params</span><span class="model-stat-val">21B</span></div>
+      <div class="model-stat"><span class="model-stat-key">Experts</span><span class="model-stat-val">160</span></div>
+      <div class="model-stat"><span class="model-stat-key">Top-K</span><span class="model-stat-val">6</span></div>
+    </div>
+    <div class="model-card reveal">
+      <div class="model-name">DeepSeek-V3</div>
+      <div class="model-org">DeepSeek · 2024</div>
+      <div class="model-stat"><span class="model-stat-key">Total Params</span><span class="model-stat-val">671B</span></div>
+      <div class="model-stat"><span class="model-stat-key">Active Params</span><span class="model-stat-val">37B</span></div>
+      <div class="model-stat"><span class="model-stat-key">Experts</span><span class="model-stat-val">256</span></div>
+      <div class="model-stat"><span class="model-stat-key">Aux-free balance</span><span class="model-stat-val">✓</span></div>
+    </div>
+    <div class="model-card reveal">
+      <div class="model-name">Grok-1</div>
+      <div class="model-org">xAI · 2024</div>
+      <div class="model-stat"><span class="model-stat-key">Total Params</span><span class="model-stat-val">314B</span></div>
+      <div class="model-stat"><span class="model-stat-key">Experts</span><span class="model-stat-val">8</span></div>
+      <div class="model-stat"><span class="model-stat-key">Top-K</span><span class="model-stat-val">2</span></div>
+      <div class="model-stat"><span class="model-stat-key">Open-source</span><span class="model-stat-val">✓</span></div>
+    </div>
+    <div class="model-card reveal">
+      <div class="model-name">GPT-4 (rumoured)</div>
+      <div class="model-org">OpenAI · 2023</div>
+      <div class="model-stat"><span class="model-stat-key">Architecture</span><span class="model-stat-val">MoE (leaked)</span></div>
+      <div class="model-stat"><span class="model-stat-key">Experts</span><span class="model-stat-val">~8–16</span></div>
+      <div class="model-stat"><span class="model-stat-key">Confirmed</span><span class="model-stat-val">No (rumour)</span></div>
+      <div class="model-stat"><span class="model-stat-key">Era</span><span class="model-stat-val">MoE mainstream</span></div>
+    </div>
+  </div>
+
+  <!-- Final Key Takeaways -->
+  <div class="card-grid mt-32">
+    <div class="card reveal">
+      <div class="card-icon" style="background:rgba(108,99,255,0.15);">📐</div>
+      <h3>Scaling Law Shift</h3>
+      <p>MoE shifts the Pareto frontier: you get more parameter capacity for the same training FLOPs. The Chinchilla scaling laws were derived for dense models — MoE follows different optimal compute allocations.</p>
+    </div>
+    <div class="card reveal">
+      <div class="card-icon" style="background:rgba(78,205,196,0.15);">🔬</div>
+      <h3>Active Research Frontiers</h3>
+      <p>Auxiliary-free load balancing (DeepSeek-V3), sparse attention + MoE (MoE-Mamba), routing beyond Top-K (soft MoE, expert choice), continual learning with frozen routers, and MoE for vision/multimodal.</p>
+    </div>
+    <div class="card reveal">
+      <div class="card-icon" style="background:rgba(245,166,35,0.15);">🚀</div>
+      <h3>The Practical Takeaway</h3>
+      <p>For inference at scale: MoE gives you the quality of a massive dense model at the latency of a small one — if you can afford the memory. The 2024 frontier is all MoE. Master this architecture.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ FOOTER ══════════════════════════ -->
+<footer>
+  <p>Transformer Architecture Series — Chapter 5</p>
+  <p style="margin-top:8px;"><span>Mixture of Experts</span> · Built for deep understanding</p>
+  <p style="margin-top:8px;">← Ch 4: FFN Layer &nbsp;|&nbsp; Ch 6: Attention Variants →</p>
+</footer>
+
+<!-- ══════════════════════ SCRIPTS ═════════════════════════ -->
+<script>
+// ── SCROLL REVEAL ─────────────────────────────────────────────
+const revealAll = () => {
+  const els = document.querySelectorAll('.reveal, .reveal-left, .reveal-right');
+  els.forEach(el => {
+    const rect = el.getBoundingClientRect();
+    if (rect.top < window.innerHeight - 80) el.classList.add('visible');
+  });
+};
+window.addEventListener('scroll', revealAll, { passive: true });
+revealAll();
+
+// ── NAV ACTIVE STATE ──────────────────────────────────────────
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('.nav-item');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navLinks.forEach(l => l.classList.remove('active'));
+      const active = document.querySelector(`.nav-item[href="#${entry.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { threshold: 0.3 });
+sections.forEach(s => observer.observe(s));
+
+// ── ARCHITECTURE ANIMATION ────────────────────────────────────
+const expertEls = Array.from({length: 8}, (_, i) => document.getElementById(`e${i}`));
+function flashExperts() {
+  expertEls.forEach(e => { e.classList.remove('active', 'inactive'); });
+  const top = new Set();
+  while (top.size < 2) top.add(Math.floor(Math.random() * 8));
+  expertEls.forEach((e, i) => {
+    if (top.has(i)) e.classList.add('active');
+    else e.classList.add('inactive');
+  });
+}
+setInterval(flashExperts, 2000);
+flashExperts();
+
+// ── HERO CANVAS ANIMATION ─────────────────────────────────────
+const canvas = document.getElementById('routerCanvas');
+const ctx = canvas.getContext('2d');
+function resizeCanvas() {
+  canvas.width  = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+const N_EXP = 8;
+const particles = [];
+let expertWeights = Array.from({length: N_EXP}, () => Math.random());
+const sumW = expertWeights.reduce((a,b)=>a+b,0);
+expertWeights = expertWeights.map(w => w/sumW);
+
+function heroLayout() {
+  const W = canvas.width, H = canvas.height;
+  const tokenX = W * 0.12, tokenY = H * 0.5;
+  const routerX = W * 0.38, routerY = H * 0.5;
+  const expertX = W * 0.65;
+  const expertYs = Array.from({length: N_EXP}, (_, i) =>
+    H * (0.08 + (i / (N_EXP - 1)) * 0.84));
+  const outX = W * 0.9, outY = H * 0.5;
+  return { W, H, tokenX, tokenY, routerX, routerY, expertX, expertYs, outX, outY };
+}
+
+class Particle {
+  constructor(layout, expertIdx, weight) {
+    this.x = layout.tokenX; this.y = layout.tokenY;
+    this.targetY = layout.expertYs[expertIdx];
+    this.expertIdx = expertIdx;
+    this.weight = weight;
+    this.phase = 0; // 0=to router, 1=to expert, 2=to output, 3=done
+    this.progress = 0;
+    this.speed = 0.012 + Math.random() * 0.01;
+    this.alpha = 0.9;
+    this.active = weight > 0.18;
+  }
+  update(layout) {
+    this.progress += this.speed;
+    if (this.progress >= 1) { this.progress = 0; this.phase++; }
+    if (this.phase === 0) {
+      this.x = layout.tokenX + (layout.routerX - layout.tokenX) * this.progress;
+      this.y = layout.tokenY;
+    } else if (this.phase === 1) {
+      this.x = layout.routerX + (layout.expertX - layout.routerX) * this.progress;
+      this.y = layout.routerY + (this.targetY - layout.routerY) * easeOut(this.progress);
+    } else if (this.phase === 2) {
+      this.x = layout.expertX + (layout.outX - layout.expertX) * this.progress;
+      this.y = this.targetY + (layout.outY - this.targetY) * easeOut(this.progress);
+    }
+  }
+  draw(c) {
+    if (this.phase >= 3) return;
+    c.beginPath();
+    c.arc(this.x, this.y, this.active ? 4 : 2.5, 0, Math.PI * 2);
+    const col = this.active ? `rgba(108,99,255,${this.alpha})` : `rgba(107,114,128,0.3)`;
+    c.fillStyle = col;
+    c.fill();
+    if (this.active && this.phase >= 1) {
+      c.beginPath();
+      c.arc(this.x, this.y, 7, 0, Math.PI*2);
+      c.fillStyle = `rgba(108,99,255,0.12)`;
+      c.fill();
+    }
+  }
+}
+function easeOut(t) { return 1 - Math.pow(1 - t, 2); }
+
+function spawnParticles() {
+  const layout = heroLayout();
+  expertWeights.forEach((w, i) => particles.push(new Particle(layout, i, w)));
+  if (particles.length > 400) particles.splice(0, 100);
+}
+setInterval(spawnParticles, 600);
+setInterval(() => {
+  let w = Array.from({length: N_EXP}, () => Math.random());
+  const s = w.reduce((a,b)=>a+b,0);
+  expertWeights = w.map(x => x/s);
+}, 4000);
+
+function drawHeroFrame() {
+  const layout = heroLayout();
+  const { W, H, tokenX, tokenY, routerX, routerY, expertX, expertYs, outX, outY } = layout;
+  ctx.clearRect(0, 0, W, H);
+
+  // Draw static wires
+  ctx.strokeStyle = 'rgba(31,38,51,0.8)';
+  ctx.lineWidth = 1;
+  // token → router
+  ctx.beginPath(); ctx.moveTo(tokenX, tokenY); ctx.lineTo(routerX, routerY); ctx.stroke();
+  // router → each expert
+  expertYs.forEach(ey => {
+    ctx.beginPath(); ctx.moveTo(routerX, routerY); ctx.lineTo(expertX, ey); ctx.stroke();
+  });
+  // experts → output
+  expertYs.forEach(ey => {
+    ctx.beginPath(); ctx.moveTo(expertX, ey); ctx.lineTo(outX, outY); ctx.stroke();
+  });
+
+  // Token node
+  ctx.beginPath(); ctx.arc(tokenX, tokenY, 10, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(108,99,255,0.25)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(108,99,255,0.8)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = '#a09af5'; ctx.font = '9px JetBrains Mono';
+  ctx.textAlign = 'center'; ctx.fillText('x_t', tokenX, tokenY + 3);
+
+  // Router node
+  ctx.beginPath(); ctx.arc(routerX, routerY, 14, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(245,166,35,0.2)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(245,166,35,0.7)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = '#f7c06a'; ctx.font = '9px JetBrains Mono';
+  ctx.textAlign = 'center'; ctx.fillText('GATE', routerX, routerY + 3);
+
+  // Expert nodes
+  expertYs.forEach((ey, i) => {
+    const w = expertWeights[i];
+    const isActive = w > 0.14;
+    ctx.beginPath(); ctx.arc(expertX, ey, isActive ? 9 : 6, 0, Math.PI*2);
+    ctx.fillStyle = isActive ? 'rgba(78,205,196,0.25)' : 'rgba(31,38,51,0.6)';
+    ctx.fill();
+    ctx.strokeStyle = isActive ? 'rgba(78,205,196,0.9)' : 'rgba(31,38,51,0.4)';
+    ctx.lineWidth = isActive ? 1.5 : 1; ctx.stroke();
+    if (isActive) {
+      ctx.fillStyle = '#7ee8e3'; ctx.font = '8px JetBrains Mono';
+      ctx.fillText(`E${i}`, expertX, ey + 3);
+    }
+  });
+
+  // Output node
+  ctx.beginPath(); ctx.arc(outX, outY, 10, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(108,99,255,0.25)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(108,99,255,0.8)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = '#a09af5'; ctx.font = '9px JetBrains Mono';
+  ctx.textAlign = 'center'; ctx.fillText('y_t', outX, outY + 3);
+
+  // Update & draw particles
+  const layout2 = heroLayout();
+  for (let i = particles.length - 1; i >= 0; i--) {
+    particles[i].update(layout2);
+    particles[i].draw(ctx);
+    if (particles[i].phase >= 3) particles.splice(i, 1);
+  }
+  requestAnimationFrame(drawHeroFrame);
+}
+drawHeroFrame();
+
+// ── SCALING CHART ─────────────────────────────────────────────
+function drawScalingChart() {
+  const c = document.getElementById('scalingChart');
+  if (!c) return;
+  c.width = c.offsetWidth * window.devicePixelRatio;
+  c.height = 200 * window.devicePixelRatio;
+  c.style.height = '200px';
+  const cx = c.getContext('2d');
+  cx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  const W = c.offsetWidth, H = 200;
+  cx.clearRect(0,0,W,H);
+
+  const denseData  = [1, 2, 4, 7, 11, 17, 24]; // perplexity (lower=better) at FLOPs 1x..7x
+  const moeData    = [1, 1.5, 2.8, 5.2, 9, 14.5, 21.5];
+  const labels = ['1×','2×','3×','4×','5×','6×','7×'];
+  const pad = { l: 40, r: 24, t: 20, b: 36 };
+  const cW = W - pad.l - pad.r, cH = H - pad.t - pad.b;
+  const maxV = 24, minV = 0;
+  const xScale = i => pad.l + (i / (labels.length-1)) * cW;
+  const yScale = v => pad.t + cH - ((v - minV) / (maxV - minV)) * cH;
+
+  // Grid
+  [0,5,10,15,20,24].forEach(v => {
+    cx.beginPath(); cx.moveTo(pad.l, yScale(v)); cx.lineTo(pad.l+cW, yScale(v));
+    cx.strokeStyle = 'rgba(31,38,51,0.8)'; cx.lineWidth=1; cx.stroke();
+    cx.fillStyle='rgba(107,114,128,0.5)'; cx.font='10px JetBrains Mono';
+    cx.textAlign='right'; cx.fillText(v, pad.l-6, yScale(v)+4);
+  });
+
+  // Dense line
+  cx.beginPath();
+  denseData.forEach((v,i) => i===0 ? cx.moveTo(xScale(i), yScale(v)) : cx.lineTo(xScale(i), yScale(v)));
+  cx.strokeStyle='rgba(255,107,107,0.7)'; cx.lineWidth=2; cx.stroke();
+
+  // MoE line
+  cx.beginPath();
+  moeData.forEach((v,i) => i===0 ? cx.moveTo(xScale(i), yScale(v)) : cx.lineTo(xScale(i), yScale(v)));
+  cx.strokeStyle='rgba(108,99,255,0.9)'; cx.lineWidth=2.5; cx.stroke();
+
+  // Dots
+  [denseData, moeData].forEach((data, di) => {
+    data.forEach((v, i) => {
+      cx.beginPath(); cx.arc(xScale(i), yScale(v), 3.5, 0, Math.PI*2);
+      cx.fillStyle = di===0 ? 'rgba(255,107,107,0.9)' : '#a09af5'; cx.fill();
+    });
+  });
+
+  // X labels
+  labels.forEach((l, i) => {
+    cx.fillStyle='rgba(107,114,128,0.6)'; cx.font='10px JetBrains Mono';
+    cx.textAlign='center'; cx.fillText(l, xScale(i), H-8);
+  });
+
+  // Legend
+  cx.fillStyle='rgba(108,99,255,0.9)'; cx.fillRect(pad.l, pad.t+2, 18, 3);
+  cx.fillStyle='#a09af5'; cx.font='10px JetBrains Mono'; cx.textAlign='left';
+  cx.fillText('MoE Model', pad.l+22, pad.t+8);
+  cx.fillStyle='rgba(255,107,107,0.7)'; cx.fillRect(pad.l+110, pad.t+2, 18, 3);
+  cx.fillStyle='rgba(255,107,107,0.9)'; cx.fillText('Dense Model', pad.l+132, pad.t+8);
+  cx.fillStyle='rgba(107,114,128,0.5)'; cx.font='9px JetBrains Mono';
+  cx.textAlign='left'; cx.fillText('Capability score ↑ (higher = better)', pad.l, H-20);
+}
+drawScalingChart();
+
+// ── ROUTING DEMO ──────────────────────────────────────────────
+const EXPERT_TYPES = [
+  { name: 'Syntax',    affinities: ['the','a','is','def','for','import','class','and','or','not'] },
+  { name: 'Math',      affinities: ['integral','derivative','matrix','gradient','loss','function','limit','sum','delta','alpha'] },
+  { name: 'Code',      affinities: ['def','class','import','return','gpu','kernel','tensor','cuda','torch','array','list'] },
+  { name: 'Geography', affinities: ['paris','london','tokyo','city','country','capital','river','mountain','france','uk'] },
+  { name: 'Emotion',   affinities: ['love','hate','happy','sad','fear','joy','anger','feel','emotion','beautiful'] },
+  { name: 'Science',   affinities: ['atom','photon','electron','dna','protein','cell','quantum','wave','force','energy'] },
+  { name: 'Language',  affinities: ['bonjour','hola','danke','merci','ciao','你好','こんにちは','arabic','french','german'] },
+  { name: 'General',   affinities: [] },
+];
+
+function buildExpertPanels() {
+  const container = document.getElementById('expertPanels');
+  if (!container) return;
+  container.innerHTML = '';
+  EXPERT_TYPES.forEach((e, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'expert-bar-wrap';
+    wrap.innerHTML = `
+      <div class="expert-name">E${i}: ${e.name}</div>
+      <div class="expert-bar-track">
+        <div class="expert-bar-fill" id="bar${i}" style="width:0%"></div>
+      </div>
+      <div class="expert-score" id="score${i}">0.00</div>`;
+    container.appendChild(wrap);
+  });
+}
+buildExpertPanels();
+
+function simulateRouting() {
+  const input = (document.getElementById('routerInput')?.value || '').toLowerCase().trim();
+  if (!input) return;
+  const words = input.split(/\s+/);
+
+  // Compute logits based on affinity scoring
+  let logits = EXPERT_TYPES.map((exp, i) => {
+    if (i === 7) return 0.4 + Math.random() * 0.3; // general always has base
+    let score = 0.1 + Math.random() * 0.25;
+    words.forEach(w => {
+      if (exp.affinities.some(a => w.includes(a) || a.includes(w))) score += 0.8 + Math.random() * 0.6;
+    });
+    return score;
+  });
+
+  // Softmax
+  const maxL = Math.max(...logits);
+  const exps = logits.map(l => Math.exp(l - maxL));
+  const sumE = exps.reduce((a,b)=>a+b,0);
+  const probs = exps.map(e => e/sumE);
+
+  // Top-2
+  const sorted = probs.map((p,i)=>({p,i})).sort((a,b)=>b.p-a.p);
+  const top2 = new Set([sorted[0].i, sorted[1].i]);
+
+  // Sparse weights (only top2 are non-zero)
+  const sparseProbs = probs.map((p,i) => top2.has(i) ? p : 0);
+  const sparseSum = sparseProbs.reduce((a,b)=>a+b,0);
+  const finalWeights = sparseProbs.map(p => p/sparseSum);
+
+  // Animate bars
+  EXPERT_TYPES.forEach((_, i) => {
+    const bar = document.getElementById(`bar${i}`);
+    const score = document.getElementById(`score${i}`);
+    if (!bar || !score) return;
+    bar.style.width = (finalWeights[i] * 100).toFixed(1) + '%';
+    bar.className = 'expert-bar-fill' + (top2.has(i) ? ' top' : '');
+    bar.style.background = top2.has(i) ? 'var(--accent)' : 'var(--accent3)';
+    score.textContent = finalWeights[i].toFixed(2);
+    score.style.color = top2.has(i) ? 'var(--accent)' : 'var(--muted)';
+  });
+
+  const top2arr = [...top2];
+  const routerOut = document.getElementById('routerOutput');
+  if (routerOut) {
+    routerOut.innerHTML = `
+      <span style="color:var(--accent3);">→</span> Routed to:
+      <span style="color:var(--accent);">Expert ${top2arr[0]} (${EXPERT_TYPES[top2arr[0]].name})</span>
+      + <span style="color:var(--accent);">Expert ${top2arr[1]} (${EXPERT_TYPES[top2arr[1]].name})</span><br>
+      <span style="color:var(--muted);">Gate weights: ${finalWeights[top2arr[0]].toFixed(3)} / ${finalWeights[top2arr[1]].toFixed(3)}</span>`;
+  }
+}
+
+function quickRoute(text) {
+  const input = document.getElementById('routerInput');
+  if (input) input.value = text;
+  simulateRouting();
+}
+
+// ── COPY CODE ─────────────────────────────────────────────────
+function copyCode(btn) {
+  const pre = btn.closest('.code-wrap').querySelector('pre');
+  navigator.clipboard.writeText(pre.innerText).then(() => {
+    btn.textContent = 'Copied!';
+    btn.style.color = 'var(--accent3)';
+    setTimeout(() => { btn.textContent = 'Copy'; btn.style.color = ''; }, 2000);
+  });
+}
+
+// init routing bars at 0
+setTimeout(simulateRouting, 100);
+</script>
+</body>
+</html>

@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Positional Encoding — Transformer Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@300;400;600&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #070b14;
+    --bg2: #0d1423;
+    --bg3: #111a2e;
+    --surface: #141f35;
+    --border: #1e2f50;
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --accent3: #f472b6;
+    --gold: #fbbf24;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --dim: #94a3b8;
+    --green: #34d399;
+    --orange: #fb923c;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 300;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 4rem 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(56,189,248,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56,189,248,.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+    animation: gridMove 25s linear infinite;
+  }
+
+  @keyframes gridMove {
+    0%   { transform: translateY(0); }
+    100% { transform: translateY(60px); }
+  }
+
+  .hero-glow {
+    position: absolute;
+    width: 700px; height: 700px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(56,189,248,.08) 0%, transparent 70%);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    animation: pulse 6s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%,100% { transform: translate(-50%,-50%) scale(1); opacity: .6; }
+    50%      { transform: translate(-50%,-50%) scale(1.15); opacity: 1; }
+  }
+
+  .badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .75rem;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid rgba(56,189,248,.3);
+    padding: .35rem 1.1rem;
+    border-radius: 2rem;
+    margin-bottom: 2rem;
+    position: relative;
+    z-index: 1;
+    animation: fadeDown .8s ease both;
+  }
+
+  .hero h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2.8rem, 7vw, 5.5rem);
+    font-weight: 400;
+    line-height: 1.1;
+    position: relative; z-index: 1;
+    animation: fadeDown .9s .1s ease both;
+  }
+
+  .hero h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .hero-sub {
+    font-size: 1.15rem;
+    color: var(--dim);
+    max-width: 560px;
+    margin-top: 1.2rem;
+    position: relative; z-index: 1;
+    animation: fadeDown 1s .2s ease both;
+  }
+
+  .scroll-hint {
+    position: absolute; bottom: 2rem;
+    display: flex; flex-direction: column; align-items: center; gap: .4rem;
+    color: var(--muted); font-size: .8rem;
+    animation: fadeDown 1.2s .5s ease both;
+  }
+
+  .scroll-hint .arrow {
+    width: 20px; height: 20px;
+    border-right: 2px solid var(--muted);
+    border-bottom: 2px solid var(--muted);
+    transform: rotate(45deg);
+    animation: bounce 2s infinite;
+  }
+
+  @keyframes bounce { 0%,100%{transform:rotate(45deg) translateY(0)} 50%{transform:rotate(45deg) translateY(5px)} }
+  @keyframes fadeDown { from{opacity:0;transform:translateY(-18px)} to{opacity:1;transform:none} }
+
+  /* ── LAYOUT ── */
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  section {
+    padding: 5rem 0;
+  }
+
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .7rem;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    margin-bottom: .8rem;
+  }
+
+  h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-weight: 400;
+    line-height: 1.15;
+    margin-bottom: 1.2rem;
+  }
+
+  h2 span { color: var(--accent); }
+
+  p {
+    color: var(--dim);
+    font-size: 1.03rem;
+    margin-bottom: 1rem;
+    max-width: 680px;
+  }
+
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 0;
+  }
+
+  /* ── PROBLEM CARD ── */
+  .problem-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-top: 2.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .problem-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--accent3), var(--accent2));
+  }
+
+  .problem-card h3 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.3rem;
+    font-weight: 400;
+    color: var(--accent3);
+    margin-bottom: .6rem;
+  }
+
+  .token-row {
+    display: flex;
+    gap: .6rem;
+    flex-wrap: wrap;
+    margin-top: 1.5rem;
+    align-items: center;
+  }
+
+  .token {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: .45rem .9rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .9rem;
+    color: var(--text);
+    transition: all .3s;
+  }
+
+  .token:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translateY(-2px);
+  }
+
+  .token.highlight { border-color: var(--accent3); color: var(--accent3); }
+  .token.eq { background: transparent; border: none; color: var(--muted); font-size: 1.2rem; }
+
+  .equal-label {
+    font-size: .78rem;
+    color: var(--muted);
+    margin-top: .8rem;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: .05em;
+  }
+
+  /* ── INTUITION ── */
+  .intuition-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.2rem;
+    margin-top: 2rem;
+  }
+
+  .int-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.6rem;
+    position: relative;
+    transition: transform .3s, border-color .3s;
+  }
+
+  .int-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent);
+  }
+
+  .int-card .icon {
+    font-size: 2rem;
+    margin-bottom: .8rem;
+  }
+
+  .int-card h4 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.1rem;
+    font-weight: 400;
+    margin-bottom: .5rem;
+    color: var(--text);
+  }
+
+  .int-card p {
+    font-size: .9rem;
+    color: var(--muted);
+    margin: 0;
+    max-width: none;
+  }
+
+  /* ── FORMULA ── */
+  .formula-block {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2.5rem;
+    margin: 2rem 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .formula-block::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 80% 20%, rgba(129,140,248,.06) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .formula {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(.85rem, 2vw, 1.05rem);
+    color: var(--accent2);
+    margin: 1rem 0;
+    line-height: 2;
+  }
+
+  .formula .kw  { color: var(--accent); }
+  .formula .num { color: var(--gold); }
+  .formula .fn  { color: var(--green); }
+  .formula .cmt { color: var(--muted); font-style: italic; }
+
+  .formula-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+    align-items: flex-start;
+    margin-top: 1.5rem;
+  }
+
+  .legend {
+    flex: 1;
+    min-width: 220px;
+  }
+
+  .legend-item {
+    display: flex;
+    gap: .8rem;
+    align-items: flex-start;
+    padding: .5rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: .88rem;
+    color: var(--dim);
+  }
+
+  .legend-item:last-child { border: none; }
+
+  .legend-item .sym {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--gold);
+    font-size: .8rem;
+    min-width: 50px;
+    padding-top: .05rem;
+  }
+
+  /* ── SINE VISUAL ── */
+  .wave-section {
+    margin: 2rem 0;
+  }
+
+  .wave-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .78rem;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+
+  canvas#waveCanvas {
+    width: 100%;
+    height: 160px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    display: block;
+  }
+
+  /* ── ADVANTAGES ── */
+  .adv-list {
+    list-style: none;
+    margin-top: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .adv-list li {
+    display: flex;
+    gap: 1.2rem;
+    align-items: flex-start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem 1.4rem;
+    transition: border-color .3s, transform .3s;
+  }
+
+  .adv-list li:hover {
+    border-color: var(--accent);
+    transform: translateX(4px);
+  }
+
+  .adv-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .75rem;
+    color: var(--accent);
+    min-width: 28px;
+    padding-top: .2rem;
+    font-weight: 600;
+  }
+
+  .adv-text strong {
+    display: block;
+    color: var(--text);
+    font-size: .97rem;
+    font-weight: 500;
+    margin-bottom: .2rem;
+  }
+
+  .adv-text span {
+    font-size: .88rem;
+    color: var(--muted);
+  }
+
+  /* ── EXAMPLE ── */
+  .example-section {
+    background: var(--bg2);
+  }
+
+  .sentence-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.8rem;
+    margin: 2rem 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1rem;
+  }
+
+  .sentence-box .sentence-raw {
+    color: var(--dim);
+    margin-bottom: 1.5rem;
+    font-size: 1.05rem;
+  }
+
+  .sentence-box .sentence-raw em {
+    color: var(--accent3);
+    font-style: normal;
+    font-weight: 600;
+  }
+
+  .token-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .82rem;
+  }
+
+  .token-table th {
+    text-align: left;
+    padding: .5rem .8rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-weight: 400;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    font-size: .72rem;
+  }
+
+  .token-table td {
+    padding: .55rem .8rem;
+    border-bottom: 1px solid rgba(30,47,80,.5);
+    vertical-align: top;
+  }
+
+  .token-table tr:last-child td { border: none; }
+
+  .token-table .word-col { color: var(--accent3); font-weight: 600; }
+  .token-table .pos-col  { color: var(--gold); }
+  .token-table .enc-col  { color: var(--accent2); font-size: .78rem; }
+  .token-table .note-col { color: var(--muted); font-size: .78rem; font-family: 'Outfit', sans-serif; }
+
+  .highlight-row { background: rgba(56,189,248,.05); }
+
+  /* ── VISUAL DEMO ── */
+  .demo-wrapper {
+    margin: 2.5rem 0;
+  }
+
+  .demo-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .72rem;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: .8rem;
+  }
+
+  .matrix-grid {
+    display: grid;
+    grid-template-columns: 120px repeat(8, 1fr);
+    gap: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .72rem;
+    overflow-x: auto;
+  }
+
+  .matrix-header {
+    padding: .3rem .4rem;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .matrix-word {
+    padding: .35rem .5rem;
+    color: var(--accent3);
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    font-size: .8rem;
+  }
+
+  .matrix-cell {
+    padding: .35rem .4rem;
+    border-radius: 4px;
+    text-align: center;
+    transition: transform .2s;
+    cursor: default;
+  }
+
+  .matrix-cell:hover { transform: scale(1.15); z-index: 10; position: relative; }
+
+  /* ── COMPARISON ── */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.2rem;
+    margin: 2rem 0;
+  }
+
+  @media (max-width: 600px) {
+    .compare-grid { grid-template-columns: 1fr; }
+    .intuition-grid { grid-template-columns: 1fr; }
+    .formula-row { flex-direction: column; }
+  }
+
+  .compare-card {
+    border-radius: 14px;
+    padding: 1.6rem;
+    border: 1px solid var(--border);
+  }
+
+  .compare-card.bad  { background: rgba(244,114,182,.05); border-color: rgba(244,114,182,.25); }
+  .compare-card.good { background: rgba(52,211,153,.05);  border-color: rgba(52,211,153,.25); }
+
+  .compare-card h4 {
+    font-size: .8rem;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+
+  .compare-card.bad  h4 { color: var(--accent3); }
+  .compare-card.good h4 { color: var(--green); }
+
+  .compare-card ul {
+    list-style: none;
+    display: flex; flex-direction: column; gap: .5rem;
+  }
+
+  .compare-card ul li {
+    font-size: .88rem;
+    color: var(--dim);
+    padding-left: 1.2rem;
+    position: relative;
+  }
+
+  .compare-card.bad  ul li::before { content: '✗'; position: absolute; left: 0; color: var(--accent3); }
+  .compare-card.good ul li::before { content: '✓'; position: absolute; left: 0; color: var(--green); }
+
+  /* ── FOOTER ── */
+  footer {
+    padding: 3rem 2rem;
+    text-align: center;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: .85rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  footer span { color: var(--accent); }
+
+  /* ── SCROLL REVEAL ── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity .7s ease, transform .7s ease;
+  }
+
+  .reveal.visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* ── TOOLTIP ── */
+  [data-tip] {
+    position: relative;
+    cursor: help;
+    border-bottom: 1px dashed var(--muted);
+  }
+
+  [data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: 130%; left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: .4rem .8rem;
+    font-size: .78rem;
+    color: var(--text);
+    white-space: nowrap;
+    z-index: 100;
+    pointer-events: none;
+    font-family: 'Outfit', sans-serif;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed;
+    top: 1.5rem; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(7,11,20,.85);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border);
+    border-radius: 2rem;
+    padding: .5rem 1.5rem;
+    display: flex; gap: 1.5rem;
+    z-index: 999;
+    font-size: .82rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  nav a {
+    color: var(--muted);
+    text-decoration: none;
+    transition: color .2s;
+  }
+
+  nav a:hover { color: var(--accent); }
+
+  @media (max-width: 600px) { nav { display: none; } }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="#problem">Problem</a>
+  <a href="#formula">Formula</a>
+  <a href="#intuition">Intuition</a>
+  <a href="#advantages">Advantages</a>
+  <a href="#example">Example</a>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-glow"></div>
+  <div class="badge">Transformer Architecture · Deep Dive</div>
+  <h1>Positional<br><em>Encoding</em></h1>
+  <p class="hero-sub">How Transformers learn <em>where</em> each word stands — without recurrence, without convolution.</p>
+  <div class="scroll-hint">
+    <span>scroll to explore</span>
+    <div class="arrow"></div>
+  </div>
+</div>
+
+<!-- PROBLEM -->
+<section id="problem">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">01 — The Problem</div>
+      <h2>Attention has <span>no sense</span> of order</h2>
+      <p>Self-attention computes relationships between every pair of tokens simultaneously. But the mechanism is <strong style="color:var(--text)">permutation-invariant</strong> — it treats the input as a <em>set</em>, not a <em>sequence</em>. Without extra information, "Dog bites man" and "Man bites dog" look identical to the model.</p>
+
+      <div class="problem-card">
+        <h3>⚡ The Permutation Problem</h3>
+        <p style="color:var(--dim);font-size:.92rem;max-width:none;">These two sentences have opposite meanings, but pure self-attention sees the same bag of tokens:</p>
+        <div class="token-row">
+          <div class="token highlight">"Dog"</div>
+          <div class="token">"bites"</div>
+          <div class="token">"Man"</div>
+          <div class="token eq">≡</div>
+          <div class="token">"Man"</div>
+          <div class="token">"bites"</div>
+          <div class="token highlight">"Dog"</div>
+          <div class="token eq">←</div>
+          <span class="token" style="border-color:var(--accent3);color:var(--accent3);">same attention weights!</span>
+        </div>
+        <div class="equal-label">// Without position info: both produce identical attention patterns</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- FORMULA -->
+<section id="formula" style="background:var(--bg2);">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">02 — The Formula</div>
+      <h2>Sine & Cosine <span>Encoding</span></h2>
+      <p>Each position gets a unique vector built from sinusoidal functions at different frequencies. The "Attention Is All You Need" paper defines it as:</p>
+
+      <div class="formula-block">
+        <div class="formula">
+          <span class="kw">PE</span>(<span class="num">pos</span>, <span class="num">2i</span>)   = <span class="fn">sin</span>( pos / <span class="num">10000</span><sup>2i/d_model</sup> )<br>
+          <span class="kw">PE</span>(<span class="num">pos</span>, <span class="num">2i+1</span>) = <span class="fn">cos</span>( pos / <span class="num">10000</span><sup>2i/d_model</sup> )<br>
+          <span class="cmt">// even dimensions → sine | odd dimensions → cosine</span>
+        </div>
+
+        <div class="formula-row">
+          <div class="legend">
+            <div class="legend-item"><span class="sym">pos</span>Position of token in sequence (0, 1, 2, …)</div>
+            <div class="legend-item"><span class="sym">i</span>Dimension index of the encoding vector</div>
+            <div class="legend-item"><span class="sym">d_model</span>Total embedding dimension (e.g. 512)</div>
+            <div class="legend-item"><span class="sym">10000</span>Scaling constant — controls frequency spread</div>
+          </div>
+          <div style="flex:1;min-width:220px;">
+            <p style="font-size:.88rem;color:var(--muted);max-width:none;">The final input to the Transformer is simply:</p>
+            <div class="formula" style="margin:.5rem 0;">
+              <span class="kw">Input</span> = <span class="fn">Embedding</span>(token) + <span class="kw">PE</span>(pos)
+            </div>
+            <p style="font-size:.85rem;color:var(--muted);max-width:none;">Position encoding is <em style="color:var(--text)">added</em> directly to the token embedding — no extra parameters needed.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sine wave canvas -->
+      <div class="wave-section">
+        <div class="wave-title">Live Visualization — Sinusoidal Waves across Positions</div>
+        <canvas id="waveCanvas" width="900" height="160"></canvas>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:.5rem;max-width:none;">Each colored wave = one dimension of the PE vector. Low-frequency waves capture broad position; high-frequency ones capture fine-grained order.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- INTUITION -->
+<section id="intuition">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">03 — Intuition</div>
+      <h2>Why <span>sinusoids</span>?</h2>
+      <p>There are many ways to encode position (learned, one-hot, index). Sinusoids were specifically chosen for elegant mathematical properties.</p>
+
+      <div class="intuition-grid">
+        <div class="int-card">
+          <div class="icon">📡</div>
+          <h4>Every Position is Unique</h4>
+          <p>Because multiple frequencies are combined (like binary clock hands), no two positions produce the same vector — even for very long sequences.</p>
+        </div>
+        <div class="int-card">
+          <div class="icon">🔗</div>
+          <h4>Relative Distance is Learnable</h4>
+          <p>PE(pos + k) can be expressed as a linear function of PE(pos). This means the model can learn to attend to "the token 3 positions back" rather than just absolute positions.</p>
+        </div>
+        <div class="int-card">
+          <div class="icon">📏</div>
+          <h4>Bounded Values</h4>
+          <p>sin/cos always stay in [−1, +1]. No explosion of values, no vanishing — the encoding stays numerically well-behaved no matter how long the sequence is.</p>
+        </div>
+        <div class="int-card">
+          <div class="icon">🔢</div>
+          <h4>The Binary Clock Analogy</h4>
+          <p>Think of it like binary digits: the lowest bit flips every step, the next every 2 steps, etc. Sinusoids do the same — lowest dim oscillates fast, highest dim oscillates slowly.</p>
+        </div>
+        <div class="int-card">
+          <div class="icon">🚫</div>
+          <h4>No Extra Parameters</h4>
+          <p>It's a deterministic function — nothing to learn, nothing to overfit. The model gets position information for free, even for sequences longer than training data.</p>
+        </div>
+        <div class="int-card">
+          <div class="icon">⚡</div>
+          <h4>Parallel Computation</h4>
+          <p>Unlike RNNs which must process tokens one-by-one to build up sequential context, PE is added all at once — enabling full parallelism.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ADVANTAGES -->
+<section id="advantages" style="background:var(--bg2);">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">04 — Advantages</div>
+      <h2>Why not other <span>approaches</span>?</h2>
+
+      <div class="compare-grid">
+        <div class="compare-card bad">
+          <h4>❌ Alternative Approaches</h4>
+          <ul>
+            <li>One-hot encoding: doesn't scale to long sequences</li>
+            <li>Integer index (pos/N): arbitrary scale, poor generalisation</li>
+            <li>Learned positional: can't extrapolate beyond training length</li>
+            <li>RNN sequential: breaks parallelism, slow to train</li>
+            <li>Convolution: limited receptive field for distant tokens</li>
+          </ul>
+        </div>
+        <div class="compare-card good">
+          <h4>✅ Sinusoidal PE Wins</h4>
+          <ul>
+            <li>Generalizes to unseen sequence lengths naturally</li>
+            <li>Bounded and numerically stable at all positions</li>
+            <li>Zero extra parameters — no added training cost</li>
+            <li>Preserves relative distance information geometrically</li>
+            <li>Works with fully parallel forward pass (no recurrence)</li>
+          </ul>
+        </div>
+      </div>
+
+      <ul class="adv-list" style="margin-top:2.5rem;">
+        <li>
+          <div class="adv-num">01</div>
+          <div class="adv-text">
+            <strong>Extrapolation to Longer Sequences</strong>
+            <span>At inference time, you can feed sequences longer than training. PE(1000) is just as valid as PE(50) — the formula works forever.</span>
+          </div>
+        </li>
+        <li>
+          <div class="adv-num">02</div>
+          <div class="adv-text">
+            <strong>Linear Relative Position via Dot Products</strong>
+            <span>The dot product PE(pos) · PE(pos+k) depends only on k (not pos). Attention scores naturally reflect relative distance — elegant and powerful.</span>
+          </div>
+        </li>
+        <li>
+          <div class="adv-num">03</div>
+          <div class="adv-text">
+            <strong>Smooth Gradient Flow</strong>
+            <span>The smooth, continuous nature of sin/cos (vs. discrete one-hot) allows gradients to flow cleanly during backpropagation through the embedding layer.</span>
+          </div>
+        </li>
+        <li>
+          <div class="adv-num">04</div>
+          <div class="adv-text">
+            <strong>Dimensionality Matches Embedding</strong>
+            <span>PE has the same d_model dimensions as the token embedding — addition is clean, no projection needed, no dimensionality mismatch.</span>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- EXAMPLE -->
+<section id="example" class="example-section">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">05 — Worked Example</div>
+      <h2>Encoding <span>"The cat sat"</span></h2>
+      <p>Let's walk through exactly what happens when we encode a 3-token sentence with a tiny <code style="color:var(--accent2);font-family:JetBrains Mono;font-size:.9em;">d_model = 8</code>.</p>
+
+      <div class="sentence-box">
+        <div class="sentence-raw">"<em>The</em>&nbsp;&nbsp;cat&nbsp;&nbsp;sat"</div>
+
+        <table class="token-table">
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>pos</th>
+              <th>PE dims (d=0..7)</th>
+              <th>Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="highlight-row">
+              <td class="word-col">"The"</td>
+              <td class="pos-col">0</td>
+              <td class="enc-col">[sin(0), cos(0), sin(0), cos(0), …]<br>= [0.000, 1.000, 0.000, 1.000, …]</td>
+              <td class="note-col">pos=0: all sines are 0, all cosines are 1. Unique "start" signature.</td>
+            </tr>
+            <tr>
+              <td class="word-col">"cat"</td>
+              <td class="pos-col">1</td>
+              <td class="enc-col">[sin(1), cos(1), sin(0.01), cos(0.01), …]<br>= [0.841, 0.540, 0.010, 1.000, …]</td>
+              <td class="note-col">First dims oscillate fast; last dims barely moved from pos=0.</td>
+            </tr>
+            <tr>
+              <td class="word-col">"sat"</td>
+              <td class="pos-col">2</td>
+              <td class="enc-col">[sin(2), cos(2), sin(0.02), cos(0.02), …]<br>= [0.909, −0.416, 0.020, 1.000, …]</td>
+              <td class="note-col">Clearly distinct from pos=1. Model can tell these apart.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mini matrix visualization -->
+      <div class="demo-wrapper reveal">
+        <div class="demo-label">PE Heatmap — values for "The cat sat" across 8 dimensions</div>
+        <div class="matrix-grid" id="matrixGrid">
+          <!-- filled by JS -->
+        </div>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:.8rem;max-width:none;">
+          🔵 dark = negative &nbsp;|&nbsp; 🟡 bright = positive &nbsp;|&nbsp; Each column = one PE dimension &nbsp;|&nbsp; Each row = one token position
+        </p>
+      </div>
+
+      <!-- Final sum -->
+      <div class="formula-block reveal" style="margin-top:2rem;">
+        <p style="font-size:.88rem;color:var(--dim);margin-bottom:1rem;max-width:none;">The final vector fed into the first Transformer layer for "cat" (pos=1) is:</p>
+        <div class="formula">
+          <span class="kw">Input</span>[1] = <span class="fn">Embed</span>("cat") + <span class="kw">PE</span>(1)<br><br>
+          <span class="cmt">// e.g., d_model = 8:</span><br>
+          Embed("cat") = [0.21, −0.14,  0.87,  0.33,  0.05, −0.62, 0.11,  0.48]<br>
+          PE(1)         = [<span class="num">0.84</span>,  <span class="num">0.54</span>,  <span class="num">0.01</span>,  <span class="num">1.00</span>,  <span class="num">0.00</span>,  <span class="num">1.00</span>, <span class="num">0.00</span>,  <span class="num">1.00</span>]<br>
+          ───────────────────────────────────────<br>
+          <span class="kw">Input</span>[1] = [<span class="green">1.05</span>,  <span class="green">0.40</span>,  <span class="green">0.88</span>,  <span class="green">1.33</span>,  <span class="green">0.05</span>,  <span class="green">0.38</span>, <span class="green">0.11</span>,  <span class="green">1.48</span>]
+        </div>
+        <p style="font-size:.85rem;color:var(--muted);margin-top:1rem;max-width:none;">This combined vector carries <em style="color:var(--text)">both</em> the semantic meaning of "cat" and the positional fact that it is <em style="color:var(--text)">the 2nd token</em> in the sequence.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <p>Positional Encoding · "Attention Is All You Need" · Vaswani et al., <span>2017</span></p>
+    <p style="margin-top:.4rem;color:var(--muted);">PE(pos, 2i) = sin(pos / 10000<sup style="font-size:.7em">2i/d</sup>) &nbsp;|&nbsp; PE(pos, 2i+1) = cos(pos / 10000<sup style="font-size:.7em">2i/d</sup>)</p>
+  </div>
+</footer>
+
+<script>
+// ── SCROLL REVEAL ──────────────────────────────────────────────
+const revealEls = document.querySelectorAll('.reveal');
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } });
+}, { threshold: .1 });
+revealEls.forEach(el => io.observe(el));
+
+// ── SINE WAVE CANVAS ───────────────────────────────────────────
+(function drawWaves() {
+  const canvas = document.getElementById('waveCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width = canvas.offsetWidth * devicePixelRatio;
+  const H = canvas.height = 160 * devicePixelRatio;
+  canvas.style.height = '160px';
+
+  const colors  = ['#38bdf8','#818cf8','#f472b6','#34d399','#fbbf24'];
+  const periods = [0.5, 1.0, 2.0, 4.0, 8.0];   // different frequencies
+
+  let t = 0;
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#111a2e';
+    ctx.fillRect(0, 0, W, H);
+
+    // centre line
+    ctx.strokeStyle = 'rgba(30,47,80,.6)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, H/2); ctx.lineTo(W, H/2); ctx.stroke();
+
+    periods.forEach((freq, idx) => {
+      ctx.beginPath();
+      ctx.strokeStyle = colors[idx];
+      ctx.lineWidth = 1.8 * devicePixelRatio;
+      ctx.globalAlpha = .85;
+
+      for (let x = 0; x < W; x++) {
+        const pos = (x / W) * 40;
+        const y = H/2 - Math.sin(pos * freq + t * .3 * freq) * (H/2 - 20*devicePixelRatio);
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    });
+
+    ctx.globalAlpha = 1;
+
+    // legend
+    colors.forEach((c, i) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(20*devicePixelRatio + i * 80*devicePixelRatio, 8*devicePixelRatio, 30*devicePixelRatio, 4*devicePixelRatio);
+      ctx.fillStyle = 'rgba(148,163,184,.7)';
+      ctx.font = `${10*devicePixelRatio}px JetBrains Mono`;
+      ctx.fillText(`dim ${i*2}`, 20*devicePixelRatio + i * 80*devicePixelRatio, 22*devicePixelRatio);
+    });
+
+    t++;
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ── PE HEATMAP MATRIX ─────────────────────────────────────────
+(function buildMatrix() {
+  const grid = document.getElementById('matrixGrid');
+  const words = ['The (pos=0)', 'cat (pos=1)', 'sat (pos=2)'];
+  const D = 8;
+
+  function pe(pos, d_model) {
+    const vec = [];
+    for (let i = 0; i < d_model; i++) {
+      const freq = Math.pow(10000, (2 * Math.floor(i/2)) / d_model);
+      vec.push(i % 2 === 0 ? Math.sin(pos / freq) : Math.cos(pos / freq));
+    }
+    return vec;
+  }
+
+  function valToColor(v) {
+    // −1..0 → blue tones  |  0..+1 → amber tones
+    const a = Math.abs(v);
+    if (v < 0) return `rgba(56,189,248,${.15 + a * .75})`;
+    return `rgba(251,191,36,${.1 + a * .8})`;
+  }
+
+  // header
+  grid.innerHTML += `<div class="matrix-header"></div>`;
+  for (let i = 0; i < D; i++) {
+    grid.innerHTML += `<div class="matrix-header" style="color:var(--muted);font-size:.68rem">d${i}<br><span style="color:var(--muted);font-size:.6rem">${i%2===0?'sin':'cos'}</span></div>`;
+  }
+
+  // rows
+  [0,1,2].forEach(pos => {
+    const vec = pe(pos, D);
+    grid.innerHTML += `<div class="matrix-word">${words[pos]}</div>`;
+    vec.forEach(v => {
+      grid.innerHTML += `
+        <div class="matrix-cell"
+             style="background:${valToColor(v)};color:var(--text)"
+             title="val: ${v.toFixed(3)}">
+          ${v.toFixed(2)}
+        </div>`;
+    });
+  });
+})();
+</script>
+</body>
+</html>
