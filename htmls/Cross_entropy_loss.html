@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cross-Entropy Loss — The Compass of LLM Learning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0a0a0f;
+    --surface:  #111118;
+    --border:   #1e1e2e;
+    --amber:    #f59e0b;
+    --amber-dim: #92600a;
+    --amber-glow: rgba(245,158,11,0.12);
+    --teal:     #2dd4bf;
+    --rose:     #fb7185;
+    --violet:   #a78bfa;
+    --green:    #4ade80;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --mono:     'Space Mono', monospace;
+    --serif:    'DM Serif Display', serif;
+    --sans:     'Inter', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ─── PROGRESS BAR ─── */
+  #progress {
+    position: fixed; top: 0; left: 0; height: 2px;
+    background: linear-gradient(90deg, var(--amber), var(--teal));
+    width: 0%; z-index: 999;
+    transition: width 0.1s linear;
+  }
+
+  /* ─── NAV ─── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(10,10,15,0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 40px;
+    display: flex; align-items: center; gap: 32px;
+  }
+  .nav-logo {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--amber); letter-spacing: 3px; text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .nav-links {
+    display: flex; gap: 24px; margin-left: auto;
+    list-style: none;
+  }
+  .nav-links a {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--muted); text-decoration: none;
+    letter-spacing: 1.5px; text-transform: uppercase;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--amber); }
+
+  /* ─── SECTIONS ─── */
+  section { padding: 100px 40px; max-width: 1100px; margin: 0 auto; }
+
+  /* ─── HERO ─── */
+  #hero {
+    min-height: 100vh; display: flex; flex-direction: column;
+    justify-content: center; padding-top: 80px; position: relative; overflow: hidden;
+  }
+  .hero-canvas-wrap {
+    position: absolute; inset: 0; z-index: 0;
+    pointer-events: none;
+  }
+  #heroCanvas { width: 100%; height: 100%; }
+  .hero-content { position: relative; z-index: 1; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--amber); letter-spacing: 4px; text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  h1 {
+    font-family: var(--serif); font-size: clamp(48px, 7vw, 96px);
+    line-height: 1.05; font-weight: 400;
+    margin-bottom: 28px;
+  }
+  h1 em { color: var(--amber); font-style: italic; }
+
+  .hero-sub {
+    font-size: 18px; color: var(--muted); max-width: 560px;
+    line-height: 1.8; margin-bottom: 40px;
+  }
+  .hero-formula {
+    display: inline-block;
+    font-family: var(--mono); font-size: 14px;
+    background: var(--surface); border: 1px solid var(--amber-dim);
+    padding: 14px 24px; border-radius: 6px;
+    color: var(--amber);
+  }
+
+  /* ─── HEADINGS ─── */
+  h2 {
+    font-family: var(--serif); font-size: clamp(32px, 4vw, 52px);
+    font-weight: 400; margin-bottom: 16px; line-height: 1.15;
+  }
+  h2 .accent { color: var(--amber); }
+  h3 {
+    font-family: var(--mono); font-size: 13px;
+    color: var(--amber); letter-spacing: 2px; text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .section-intro {
+    font-size: 17px; color: var(--muted); max-width: 640px;
+    margin-bottom: 56px; line-height: 1.85;
+  }
+
+  /* ─── DIVIDER ─── */
+  .divider {
+    width: 100%; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--amber-dim), transparent);
+    margin: 0 0 0 0;
+  }
+
+  /* ─── CONCEPT CARDS ─── */
+  .card-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px; margin-top: 16px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 28px;
+    transition: border-color 0.3s, transform 0.3s;
+    position: relative; overflow: hidden;
+  }
+  .card::before {
+    content: ''; position: absolute; inset: 0;
+    background: var(--amber-glow);
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .card:hover { border-color: var(--amber-dim); transform: translateY(-3px); }
+  .card:hover::before { opacity: 1; }
+  .card-icon { font-size: 28px; margin-bottom: 14px; }
+  .card h4 {
+    font-family: var(--mono); font-size: 12px;
+    color: var(--amber); letter-spacing: 2px; text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .card p { font-size: 14px; color: var(--muted); line-height: 1.75; }
+  .card .formula {
+    font-family: var(--mono); font-size: 13px;
+    color: var(--teal); margin-top: 14px;
+    padding: 10px 14px; background: rgba(45,212,191,0.06);
+    border-left: 2px solid var(--teal); border-radius: 3px;
+  }
+
+  /* ─── INTERACTIVE PROBABILITY DEMO ─── */
+  .demo-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 36px; margin-top: 24px;
+  }
+  .demo-box h3 { margin-bottom: 4px; }
+  .demo-label { font-size: 13px; color: var(--muted); margin-bottom: 28px; }
+  .token-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 28px; }
+  .token-btn {
+    font-family: var(--mono); font-size: 12px; padding: 8px 16px;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text); cursor: pointer;
+    transition: all 0.2s;
+  }
+  .token-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .token-btn.active { border-color: var(--amber); background: var(--amber-glow); color: var(--amber); }
+
+  .prob-bars { display: flex; flex-direction: column; gap: 10px; }
+  .prob-row {
+    display: grid; grid-template-columns: 80px 1fr 70px 80px;
+    gap: 12px; align-items: center;
+  }
+  .prob-label { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; }
+  .prob-bar-track {
+    height: 20px; background: var(--bg);
+    border-radius: 3px; overflow: hidden; position: relative;
+  }
+  .prob-bar-fill {
+    height: 100%; border-radius: 3px;
+    transition: width 0.6s cubic-bezier(0.34,1.56,0.64,1);
+    position: relative;
+  }
+  .prob-bar-fill.model { background: linear-gradient(90deg, var(--violet), var(--teal)); }
+  .prob-bar-fill.true { background: linear-gradient(90deg, var(--amber), var(--rose)); }
+  .prob-val { font-family: var(--mono); font-size: 11px; color: var(--text); }
+  .prob-loss { font-family: var(--mono); font-size: 11px; }
+  .prob-loss.high { color: var(--rose); }
+  .prob-loss.low { color: var(--green); }
+
+  .loss-display {
+    margin-top: 28px; padding: 20px 24px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+  }
+  .loss-number {
+    font-family: var(--mono); font-size: 36px;
+    font-weight: 700; color: var(--amber);
+    transition: color 0.4s;
+  }
+  .loss-number.high-loss { color: var(--rose); }
+  .loss-number.low-loss { color: var(--green); }
+  .loss-text { flex: 1; min-width: 200px; }
+  .loss-text p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .loss-text strong { color: var(--text); }
+
+  /* ─── MATH SECTION ─── */
+  .math-block {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 32px; margin: 24px 0;
+    position: relative;
+  }
+  .math-block .step-num {
+    position: absolute; top: -14px; left: 24px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--bg); background: var(--amber);
+    padding: 3px 12px; border-radius: 12px; letter-spacing: 1px;
+  }
+  .math-equation {
+    font-family: var(--mono); font-size: 15px;
+    color: var(--teal); padding: 16px 0;
+    border-top: 1px solid var(--border);
+    margin-top: 14px;
+    letter-spacing: 0.5px;
+    line-height: 2;
+  }
+  .math-annotation {
+    font-size: 13px; color: var(--muted);
+    line-height: 1.8;
+  }
+  .math-annotation span { color: var(--text); font-weight: 500; }
+
+  /* ─── TRAINING LOOP ─── */
+  .loop-steps {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px; margin-top: 24px;
+  }
+  .loop-step {
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 24px; position: relative; background: var(--surface);
+    transition: border-color 0.3s;
+  }
+  .loop-step:hover { border-color: var(--amber-dim); }
+  .step-arrow {
+    position: absolute; right: -20px; top: 50%;
+    transform: translateY(-50%); z-index: 2;
+    font-size: 20px; color: var(--amber-dim);
+    pointer-events: none;
+  }
+  .loop-step:last-child .step-arrow { display: none; }
+  .step-icon { font-size: 24px; margin-bottom: 12px; }
+  .step-title {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--amber); letter-spacing: 2px; text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .step-desc { font-size: 13px; color: var(--muted); line-height: 1.65; }
+
+  /* ─── ANIMATED TRAINING LOSS CHART ─── */
+  #lossChartCanvas {
+    width: 100%; height: 280px; display: block;
+    border-radius: 6px;
+  }
+
+  /* ─── VARIANTS TABLE ─── */
+  .variant-table {
+    width: 100%; border-collapse: collapse;
+    margin-top: 24px; font-size: 14px;
+  }
+  .variant-table th {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--amber); letter-spacing: 2px; text-transform: uppercase;
+    text-align: left; padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .variant-table td {
+    padding: 14px 16px; border-bottom: 1px solid var(--border);
+    color: var(--text); vertical-align: top; line-height: 1.6;
+  }
+  .variant-table tr:hover td { background: var(--amber-glow); }
+  .tag {
+    display: inline-block; padding: 2px 10px;
+    border-radius: 12px; font-family: var(--mono);
+    font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+    margin: 2px;
+  }
+  .tag.primary { background: rgba(245,158,11,0.15); color: var(--amber); border: 1px solid var(--amber-dim); }
+  .tag.secondary { background: rgba(45,212,191,0.1); color: var(--teal); border: 1px solid rgba(45,212,191,0.3); }
+  .tag.warn { background: rgba(251,113,133,0.1); color: var(--rose); border: 1px solid rgba(251,113,133,0.3); }
+  .tag.good { background: rgba(74,222,128,0.1); color: var(--green); border: 1px solid rgba(74,222,128,0.3); }
+
+  /* ─── PITFALLS ─── */
+  .pitfall-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px; margin-top: 24px;
+  }
+  .pitfall-card {
+    border-radius: 8px; padding: 24px;
+    border: 1px solid var(--border); background: var(--surface);
+  }
+  .pitfall-card.warn-card { border-color: rgba(251,113,133,0.3); }
+  .pitfall-card.tip-card  { border-color: rgba(74,222,128,0.3); }
+  .pitfall-icon { font-size: 22px; margin-bottom: 10px; }
+  .pitfall-card h4 {
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 2px; text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .warn-card h4 { color: var(--rose); }
+  .tip-card h4  { color: var(--green); }
+  .pitfall-card p { font-size: 13px; color: var(--muted); line-height: 1.7; }
+
+  /* ─── CODE BLOCK ─── */
+  .code-wrap {
+    background: #050508; border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; margin-top: 24px;
+  }
+  .code-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .code-header span {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--muted); letter-spacing: 2px; text-transform: uppercase;
+  }
+  .copy-btn {
+    font-family: var(--mono); font-size: 10px; padding: 4px 12px;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: transparent; color: var(--muted); cursor: pointer;
+    transition: all 0.2s;
+  }
+  .copy-btn:hover { border-color: var(--amber); color: var(--amber); }
+  pre {
+    padding: 24px; overflow-x: auto;
+    font-family: var(--mono); font-size: 13px;
+    line-height: 1.85; color: #c9d1d9;
+  }
+  .kw { color: #ff7b72; }
+  .fn { color: #d2a8ff; }
+  .st { color: #a5d6ff; }
+  .cm { color: #6e7681; font-style: italic; }
+  .num { color: #f2cc60; }
+  .cls { color: #79c0ff; }
+  .op { color: var(--teal); }
+
+  /* ─── BEST PRACTICES FINAL ─── */
+  .best-row {
+    display: grid; grid-template-columns: 60px 1fr;
+    gap: 20px; align-items: start;
+    padding: 24px 0; border-bottom: 1px solid var(--border);
+  }
+  .best-row:last-child { border-bottom: none; }
+  .best-num {
+    font-family: var(--serif); font-size: 48px;
+    color: var(--amber); line-height: 1; opacity: 0.4;
+  }
+  .best-content h4 {
+    font-family: var(--mono); font-size: 12px;
+    color: var(--amber); letter-spacing: 2px; text-transform: uppercase;
+    margin-bottom: 8px; margin-top: 8px;
+  }
+  .best-content p { font-size: 14px; color: var(--muted); line-height: 1.75; }
+  .best-content p strong { color: var(--text); }
+
+  /* ─── REVEAL ANIMATION ─── */
+  .reveal {
+    opacity: 0; transform: translateY(30px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  /* ─── FOOTER ─── */
+  footer {
+    text-align: center; padding: 60px 40px;
+    border-top: 1px solid var(--border);
+    font-family: var(--mono); font-size: 11px;
+    color: var(--muted); letter-spacing: 2px;
+  }
+
+  /* ─── SCROLL-TRIGGER CANVAS CHART ─── */
+  .chart-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 28px; margin-top: 24px;
+  }
+  .chart-legend {
+    display: flex; gap: 24px; margin-bottom: 20px; flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+  }
+
+  /* ─── TEMPERATURE SLIDER ─── */
+  .slider-wrap { margin-top: 28px; }
+  .slider-row {
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 20px; flex-wrap: wrap;
+  }
+  .slider-row label {
+    font-family: var(--mono); font-size: 12px;
+    color: var(--amber); min-width: 160px;
+  }
+  input[type=range] {
+    -webkit-appearance: none; flex: 1; min-width: 140px;
+    height: 4px; background: var(--border);
+    border-radius: 2px; outline: none; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--amber); cursor: pointer;
+  }
+  .slider-val {
+    font-family: var(--mono); font-size: 14px;
+    color: var(--amber); min-width: 40px; text-align: right;
+  }
+
+  #softmaxCanvas {
+    width: 100%; height: 200px; display: block;
+    border-radius: 6px;
+  }
+
+  @media (max-width: 700px) {
+    nav { padding: 12px 20px; }
+    .nav-links { display: none; }
+    section { padding: 70px 20px; }
+    .prob-row { grid-template-columns: 60px 1fr 50px; }
+    .prob-loss { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<nav>
+  <span class="nav-logo">&#9670; CE Loss</span>
+  <ul class="nav-links">
+    <li><a href="#intuition">Intuition</a></li>
+    <li><a href="#math">Math</a></li>
+    <li><a href="#training">Training</a></li>
+    <li><a href="#variants">Variants</a></li>
+    <li><a href="#bestpractices">Best Practices</a></li>
+    <li><a href="#code">Code</a></li>
+  </ul>
+</nav>
+
+<!-- ═══════════════════════════ HERO ═══════════════════════════ -->
+<section id="hero">
+  <div class="hero-canvas-wrap">
+    <canvas id="heroCanvas"></canvas>
+  </div>
+  <div class="hero-content">
+    <p class="eyebrow">Chapter — Loss Functions in LLMs</p>
+    <h1>The <em>cost</em> of<br>being wrong</h1>
+    <p class="hero-sub">
+      Cross-Entropy Loss is the single number that drives every weight update in a language model. It measures how far a model's predicted distribution is from reality — and converts that distance into a signal for learning.
+    </p>
+    <div class="hero-formula">
+      ℒ = − Σ<sub>i</sub> y<sub>i</sub> · log(ŷ<sub>i</sub>)
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════ INTUITION ═══════════════════════════ -->
+<section id="intuition">
+  <div class="reveal">
+    <p class="eyebrow">Section 01</p>
+    <h2>What is <span class="accent">Cross-Entropy</span> Loss?</h2>
+    <p class="section-intro">
+      Before any equations, the intuition: a language model outputs a probability for every word in its vocabulary. Cross-entropy measures how surprised the model is when it sees the actual next word. Lower surprise = lower loss = better model.
+    </p>
+  </div>
+
+  <div class="card-grid reveal">
+    <div class="card">
+      <div class="card-icon">🎲</div>
+      <h4>Entropy (Self-Information)</h4>
+      <p>How unpredictable is a distribution on its own? A coin flip is high entropy. A loaded die is low entropy. Claude's vocabulary distribution starts messy — high entropy.</p>
+      <div class="formula">H(p) = − Σ p(x)·log p(x)</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">📐</div>
+      <h4>Cross-Entropy</h4>
+      <p>How many bits do you need to encode events from distribution <em>p</em> (truth) using a code optimised for <em>q</em> (model)? The extra cost beyond entropy is the KL divergence — the model's inefficiency.</p>
+      <div class="formula">H(p,q) = − Σ p(x)·log q(x)</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🎯</div>
+      <h4>In LLMs: One-Hot Truth</h4>
+      <p>The true label y is one-hot: the correct token gets probability 1.0, all others 0. This collapses the formula to just the log probability of the correct token.</p>
+      <div class="formula">ℒ = − log q(correct token)</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔗</div>
+      <h4>KL Divergence Link</h4>
+      <p>Cross-entropy = Entropy + KL divergence. Since true entropy is fixed, minimising cross-entropy is exactly the same as minimising KL divergence — how far the model is from truth.</p>
+      <div class="formula">H(p,q) = H(p) + D<sub>KL</sub>(p‖q)</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🌡️</div>
+      <h4>Perplexity</h4>
+      <p>Perplexity = e<sup>loss</sup>. It represents the effective number of equally likely choices the model thinks it has at each token. GPT-2 launched at ~35 PPX. Modern LLMs approach single digits on curated text.</p>
+      <div class="formula">PPL = e<sup>ℒ</sup></div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🧮</div>
+      <h4>Why Logarithm?</h4>
+      <p>Log turns multiplied probabilities into summed log-probs (numerically stable). It's convex — so gradient descent reliably reaches the optimum. And it matches information-theoretic bit costs naturally.</p>
+      <div class="formula">log(a·b) = log(a) + log(b)</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════ INTERACTIVE DEMO ═══════════════════════════ -->
+<section id="interactive-demo">
+  <div class="reveal">
+    <p class="eyebrow">Interactive — Feel the Loss</p>
+    <h2>Pick a token. <span class="accent">See the penalty.</span></h2>
+    <p class="section-intro">
+      The model predicts a distribution over the next token. The correct answer is <strong style="color:var(--amber)">"cat"</strong>. Click each token to see how much cross-entropy loss that prediction incurs.
+    </p>
+  </div>
+
+  <div class="demo-box reveal">
+    <h3>Predicted Token Distribution</h3>
+    <p class="demo-label">Prompt: "The quick brown fox jumped over the lazy ___"</p>
+
+    <div id="probBarsContainer" class="prob-bars"></div>
+
+    <div class="loss-display">
+      <div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px;letter-spacing:2px;text-transform:uppercase;">Cross-Entropy Loss</div>
+        <div class="loss-number" id="lossValue">—</div>
+      </div>
+      <div class="loss-text">
+        <p id="lossExplain">Click a token above to compute the loss.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Temperature Demo -->
+  <div class="demo-box reveal" style="margin-top:32px;">
+    <h3>Temperature & Loss Distribution</h3>
+    <p class="demo-label">Temperature scales logits before softmax — watch how it sharpens or flattens the distribution and changes the loss.</p>
+    <div class="slider-wrap">
+      <div class="slider-row">
+        <label>Temperature (τ)</label>
+        <input type="range" id="tempSlider" min="0.1" max="3.0" step="0.05" value="1.0">
+        <span class="slider-val" id="tempVal">1.0</span>
+      </div>
+    </div>
+    <canvas id="softmaxCanvas"></canvas>
+    <p id="tempLossInfo" style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:14px;text-align:center;"></p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════ MATH ═══════════════════════════ -->
+<section id="math">
+  <div class="reveal">
+    <p class="eyebrow">Section 02</p>
+    <h2>The <span class="accent">Mathematics</span></h2>
+    <p class="section-intro">
+      Step through the full derivation — from raw logits to a scalar loss value that flows gradients backward through billions of parameters.
+    </p>
+  </div>
+
+  <div class="math-block reveal">
+    <div class="step-num">STEP 1 — LOGITS</div>
+    <p class="math-annotation">The final linear layer produces raw scores (logits) — one per vocabulary token. These have no probabilistic interpretation yet. <span>For GPT-style models the vocab is ~50K tokens; for Llama-3 it's ~128K.</span></p>
+    <div class="math-equation">
+      z = W<sub>out</sub> · h<sub>last</sub> + b &nbsp;&nbsp;  ∈ ℝ<sup>|V|</sup>
+    </div>
+  </div>
+
+  <div class="math-block reveal">
+    <div class="step-num">STEP 2 — SOFTMAX</div>
+    <p class="math-annotation">Softmax converts logits into a proper probability distribution. <span>The exponentiation amplifies differences; normalising ensures they sum to 1.</span> Temperature τ controls sharpness — τ→0 gives argmax, τ→∞ gives uniform.</p>
+    <div class="math-equation">
+      ŷ<sub>k</sub> = softmax(z/τ)<sub>k</sub> = exp(z<sub>k</sub>/τ) / Σ<sub>j</sub> exp(z<sub>j</sub>/τ)
+    </div>
+  </div>
+
+  <div class="math-block reveal">
+    <div class="step-num">STEP 3 — CROSS-ENTROPY LOSS</div>
+    <p class="math-annotation">For a single token with true label index <em>c</em>, the one-hot ground truth collapses the sum to a single term. <span>This is why CE loss is simply the negative log probability of the correct token.</span></p>
+    <div class="math-equation">
+      ℒ<sub>token</sub> = − log(ŷ<sub>c</sub>)
+    </div>
+  </div>
+
+  <div class="math-block reveal">
+    <div class="step-num">STEP 4 — SEQUENCE LOSS</div>
+    <p class="math-annotation">For a sequence of T tokens, CE loss averages over all positions. <span>Each token prediction is independent conditioned on the previous ones — the autoregressive factorisation.</span> This is also called NLL (Negative Log-Likelihood).</p>
+    <div class="math-equation">
+      ℒ<sub>seq</sub> = − (1/T) Σ<sub>t=1</sub><sup>T</sup> log P(x<sub>t</sub> | x<sub>&lt;t</sub>; θ)
+    </div>
+  </div>
+
+  <div class="math-block reveal">
+    <div class="step-num">STEP 5 — GRADIENT (THE MAGIC)</div>
+    <p class="math-annotation">The gradient of CE loss with respect to logits is beautifully simple: <span>predicted probability minus the one-hot indicator.</span> This clean subtraction is why CE + softmax is computationally perfect for classification — no chain rule complexity.</p>
+    <div class="math-equation">
+      ∂ℒ / ∂z<sub>k</sub> = ŷ<sub>k</sub> − 𝟙[k = c]
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════ TRAINING LOOP ═══════════════════════════ -->
+<section id="training">
+  <div class="reveal">
+    <p class="eyebrow">Section 03</p>
+    <h2>CE Loss in the <span class="accent">Training Loop</span></h2>
+    <p class="section-intro">
+      Every forward pass, every backward pass, every weight update — cross-entropy loss is the signal that orchestrates it all. Here's how it fits end-to-end.
+    </p>
+  </div>
+
+  <div class="loop-steps reveal">
+    <div class="loop-step">
+      <div class="step-icon">📦</div>
+      <div class="step-title">1. Token Batch</div>
+      <p class="step-desc">Sample a batch of token sequences. Each position t becomes an (input, label) pair: tokens[0:t] → tokens[t].</p>
+      <div class="step-arrow">→</div>
+    </div>
+    <div class="loop-step">
+      <div class="step-icon">🧠</div>
+      <div class="step-title">2. Forward Pass</div>
+      <p class="step-desc">The transformer processes input tokens through attention and FFN layers, producing logit vectors at each position.</p>
+      <div class="step-arrow">→</div>
+    </div>
+    <div class="loop-step">
+      <div class="step-icon">📊</div>
+      <div class="step-title">3. Compute Loss</div>
+      <p class="step-desc">Softmax + CE loss is computed for each position. Average over all tokens in the batch. This is your scalar signal.</p>
+      <div class="step-arrow">→</div>
+    </div>
+    <div class="loop-step">
+      <div class="step-icon">🔄</div>
+      <div class="step-title">4. Backprop</div>
+      <p class="step-desc">Gradients flow from the loss backward through every parameter: attention heads, projection matrices, embeddings.</p>
+      <div class="step-arrow">→</div>
+    </div>
+    <div class="loop-step">
+      <div class="step-icon">⚙️</div>
+      <div class="step-title">5. Optimizer Step</div>
+      <p class="step-desc">AdamW uses the gradients and its momentum state to update each weight, applying weight decay as regularisation.</p>
+      <div class="step-arrow">→</div>
+    </div>
+    <div class="loop-step">
+      <div class="step-icon">📉</div>
+      <div class="step-title">6. Loss Decreases</div>
+      <p class="step-desc">Repeat millions of times. Loss curve descends. Perplexity falls. The model learns language. Every step steered by CE loss.</p>
+    </div>
+  </div>
+
+  <!-- Training loss chart -->
+  <div class="chart-wrap reveal" style="margin-top:48px;">
+    <h3>Training Loss Curve</h3>
+    <div class="chart-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div> Training Loss</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div> Validation Loss</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--rose)"></div> Overfitting Zone</div>
+    </div>
+    <canvas id="lossChartCanvas"></canvas>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════ VARIANTS ═══════════════════════════ -->
+<section id="variants">
+  <div class="reveal">
+    <p class="eyebrow">Section 04</p>
+    <h2>Loss <span class="accent">Variants</span> & When to Use Them</h2>
+    <p class="section-intro">
+      Standard CE loss is the baseline. These are the modifications used across the LLM development lifecycle — from pre-training to RLHF.
+    </p>
+  </div>
+
+  <table class="variant-table reveal">
+    <thead>
+      <tr>
+        <th>Loss Variant</th>
+        <th>Formula / Mechanism</th>
+        <th>Used In</th>
+        <th>Why</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Standard CE Loss</strong><br><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">−log(ŷ<sub>c</sub>)</span></td>
+        <td>Negative log prob of correct token. Sum or mean over sequence.</td>
+        <td><span class="tag primary">Pre-training</span> <span class="tag primary">SFT</span></td>
+        <td>Simple, stable gradients, proven at scale. The default for next-token prediction across all major LLMs.</td>
+      </tr>
+      <tr>
+        <td><strong>Label-Smoothed CE</strong><br><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">ε=0.1 typical</span></td>
+        <td>Softens one-hot target: 1−ε for correct token, ε/(V−1) for others. Prevents overconfidence.</td>
+        <td><span class="tag primary">SFT</span> <span class="tag secondary">Fine-tuning</span></td>
+        <td>Reduces over-fitting, improves calibration. Standard in Transformer (2017) paper. Less critical at scale.</td>
+      </tr>
+      <tr>
+        <td><strong>Masked CE Loss</strong></td>
+        <td>Applies loss only to non-padding tokens. Mask ignores &lt;PAD&gt; and optionally prompt tokens.</td>
+        <td><span class="tag primary">SFT</span> <span class="tag secondary">Instruction tuning</span></td>
+        <td>Prevents model from learning to predict padding. In chat fine-tuning, masks the prompt — model only learns to predict the assistant's response.</td>
+      </tr>
+      <tr>
+        <td><strong>Weighted CE Loss</strong></td>
+        <td>Per-token weights: w<sub>t</sub> · (−log ŷ<sub>t</sub>). Higher weight on rare or important tokens.</td>
+        <td><span class="tag secondary">Domain SFT</span></td>
+        <td>Upweights critical tokens (e.g. code, numbers). Counteracts vocabulary imbalance without resampling data.</td>
+      </tr>
+      <tr>
+        <td><strong>SFT + KL Penalty</strong><br><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">ℒ = CE + β·D<sub>KL</sub></span></td>
+        <td>Adds KL divergence from reference model to CE loss. Constrains drift from base model.</td>
+        <td><span class="tag secondary">RLHF / DPO</span></td>
+        <td>Prevents reward hacking and catastrophic forgetting. β controls the tradeoff between following SFT signal and staying close to base.</td>
+      </tr>
+      <tr>
+        <td><strong>DPO Loss</strong></td>
+        <td>No explicit reward model. Derives policy gradient from preference pairs directly using CE-style log-ratio objective.</td>
+        <td><span class="tag secondary">Alignment</span></td>
+        <td>Stable, efficient alternative to PPO-based RLHF. Used in Llama-3, Mistral, and most modern alignment pipelines.</td>
+      </tr>
+      <tr>
+        <td><strong>GRPO / Group Relative</strong></td>
+        <td>Samples K responses per prompt, uses group reward baseline, maximises advantage-weighted log-probs.</td>
+        <td><span class="tag secondary">Reasoning (CoT)</span></td>
+        <td>DeepSeek-R1 / Qwen-2.5 approach. Teaches chains of thought by reinforcing high-reward rollouts vs. low-reward ones within a group.</td>
+      </tr>
+      <tr>
+        <td><strong>Focal Loss</strong><br><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">(1−p)<sup>γ</sup>·CE</span></td>
+        <td>Down-weights easy (high-confidence) examples. Focuses learning on hard tokens.</td>
+        <td><span class="tag warn">Experimental</span></td>
+        <td>Originally for object detection. Sometimes used in LLM SFT to focus on tokens the model finds hard. Not yet standard.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════ PITFALLS ═══════════════════════════ -->
+<section id="pitfalls">
+  <div class="reveal">
+    <p class="eyebrow">Section 05</p>
+    <h2>Common <span class="accent">Pitfalls</span> & Fixes</h2>
+    <p class="section-intro">
+      CE loss is robust, but misuse causes silent failures. These are the mistakes that cost weeks of training runs.
+    </p>
+  </div>
+
+  <div class="pitfall-grid reveal">
+    <div class="pitfall-card warn-card">
+      <div class="pitfall-icon">⚠️</div>
+      <h4>Numerical Instability</h4>
+      <p>Never compute softmax then log separately. Catastrophic cancellation occurs. Always use <code>log_softmax</code> + <code>NLLLoss</code> or <code>CrossEntropyLoss</code> (which fuses them).</p>
+    </div>
+    <div class="pitfall-card tip-card">
+      <div class="pitfall-icon">✅</div>
+      <h4>LogSoftmax Fusion</h4>
+      <p>PyTorch's <code>F.cross_entropy</code> accepts raw logits and computes the log-sum-exp trick internally. Always pass logits, never softmax probabilities.</p>
+    </div>
+    <div class="pitfall-card warn-card">
+      <div class="pitfall-icon">⚠️</div>
+      <h4>Prompt Loss Contamination</h4>
+      <p>In SFT, computing loss on prompt tokens teaches the model to predict the user query — not the response. This degrades instruction-following quality significantly.</p>
+    </div>
+    <div class="pitfall-card tip-card">
+      <div class="pitfall-icon">✅</div>
+      <h4>Response-Only Masking</h4>
+      <p>Set <code>labels[prompt_tokens] = -100</code>. PyTorch's CE loss ignores index -100 by default. This ensures gradients only flow from the model's generated tokens.</p>
+    </div>
+    <div class="pitfall-card warn-card">
+      <div class="pitfall-icon">⚠️</div>
+      <h4>Loss Spike at Step 0</h4>
+      <p>Initial CE loss should be ≈ log(vocab_size) ≈ 10.8 for 50K vocab. A much higher spike means NaN propagation from bad weight init or LR too high.</p>
+    </div>
+    <div class="pitfall-card tip-card">
+      <div class="pitfall-icon">✅</div>
+      <h4>Warm-Up + Clipping</h4>
+      <p>Use 100–2000 step LR warm-up and gradient clipping (norm ≤ 1.0). Log loss at step 0 as a sanity check. Expected ≈ log(V) confirms correct initialization.</p>
+    </div>
+    <div class="pitfall-card warn-card">
+      <div class="pitfall-icon">⚠️</div>
+      <h4>Reduction Mode Mismatch</h4>
+      <p>Using <code>reduction='sum'</code> with variable-length sequences scales loss with sequence length, biasing toward longer examples. Gradients become inconsistent across batches.</p>
+    </div>
+    <div class="pitfall-card tip-card">
+      <div class="pitfall-icon">✅</div>
+      <h4>Mean Reduction</h4>
+      <p>Use <code>reduction='mean'</code> always. For masked losses, compute the mean over non-masked tokens: <code>loss.sum() / mask.sum()</code>. This normalises correctly across batch diversity.</p>
+    </div>
+    <div class="pitfall-card warn-card">
+      <div class="pitfall-icon">⚠️</div>
+      <h4>Metric vs Loss Confusion</h4>
+      <p>CE loss and perplexity are training signals, not human-quality metrics. A model with lower perplexity can still be less helpful or less truthful — use human eval for downstream quality.</p>
+    </div>
+    <div class="pitfall-card tip-card">
+      <div class="pitfall-icon">✅</div>
+      <h4>Layered Evaluation</h4>
+      <p>Track CE/PPL during training, use benchmark evals (MMLU, HumanEval) for capability, and RLHF + human ratings for alignment quality. They measure different things.</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════ BEST PRACTICES ═══════════════════════════ -->
+<section id="bestpractices">
+  <div class="reveal">
+    <p class="eyebrow">Section 06</p>
+    <h2>Best Practices — <span class="accent">End to End</span></h2>
+    <p class="section-intro">
+      What the best LLM training teams actually do, in the order you'll encounter it.
+    </p>
+  </div>
+
+  <div class="reveal">
+    <div class="best-row">
+      <div class="best-num">1</div>
+      <div class="best-content">
+        <h4>Pre-Training: Standard CE, No Masking</h4>
+        <p>Use <strong>standard cross-entropy loss over all tokens</strong>. No label smoothing needed at scale — the data diversity provides implicit regularisation. Pack sequences to full context length to maximise GPU utilisation. Loss is averaged over all non-padding positions.</p>
+      </div>
+    </div>
+    <div class="best-row">
+      <div class="best-num">2</div>
+      <div class="best-content">
+        <h4>SFT: Masked CE, Response Tokens Only</h4>
+        <p>For instruction tuning, <strong>mask the prompt tokens from the loss</strong>. Only compute gradients on the assistant's response. Use <code>labels[prompt] = -100</code>. This makes the model learn to generate good completions, not echo user prompts.</p>
+      </div>
+    </div>
+    <div class="best-row">
+      <div class="best-num">3</div>
+      <div class="best-content">
+        <h4>Always Use Fused Log-Softmax</h4>
+        <p>Use <strong><code>torch.nn.CrossEntropyLoss</code> with raw logits</strong>, never manual softmax + log. The internally fused logsumexp is numerically stable across bfloat16 and float16. This is non-negotiable for mixed precision training.</p>
+      </div>
+    </div>
+    <div class="best-row">
+      <div class="best-num">4</div>
+      <div class="best-content">
+        <h4>Monitor Loss Shape, Not Just Value</h4>
+        <p>A <strong>healthy loss curve is smooth and monotonically decreasing</strong> with noise. Spikes indicate bad batches or LR issues. A flat plateau signals the model needs more data or a different architecture. Loss oscillating without decreasing often means LR is too high.</p>
+      </div>
+    </div>
+    <div class="best-row">
+      <div class="best-num">5</div>
+      <div class="best-content">
+        <h4>Post SFT: Move Beyond CE for Alignment</h4>
+        <p>For RLHF and alignment stages, <strong>CE alone is insufficient</strong> — the model needs preference signal, not just MLE supervision. Transition to DPO (CE-derived log-ratio objective) or PPO with a KL penalty. Keep a reference model frozen; measure KL drift throughout.</p>
+      </div>
+    </div>
+    <div class="best-row">
+      <div class="best-num">6</div>
+      <div class="best-content">
+        <h4>Perplexity as a Diagnostic, Not a Goal</h4>
+        <p>Lower perplexity means the model predicts held-out text better — useful for comparing checkpoints on the same distribution. <strong>Do not optimise perplexity as a proxy for quality.</strong> Use downstream task benchmarks (MMLU, GSM8K, HumanEval) for capability measurement.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════ CODE ═══════════════════════════ -->
+<section id="code">
+  <div class="reveal">
+    <p class="eyebrow">Section 07</p>
+    <h2>Production <span class="accent">Code</span></h2>
+    <p class="section-intro">
+      Battle-tested implementations for every stage of the LLM development pipeline.
+    </p>
+  </div>
+
+  <div class="code-wrap reveal">
+    <div class="code-header">
+      <span>Pre-Training — Standard CE Loss</span>
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+    <pre><span class="kw">import</span> torch
+<span class="kw">import</span> torch.nn <span class="kw">as</span> nn
+<span class="kw">import</span> torch.nn.functional <span class="kw">as</span> F
+
+<span class="cm"># ─── Standard CE Loss for Pre-Training ───────────────────────</span>
+<span class="cm"># Input:  logits  (B, T, V) — raw outputs from the final linear layer</span>
+<span class="cm"># Labels: targets (B, T)   — token IDs shifted left by 1 position</span>
+
+<span class="kw">def</span> <span class="fn">pretrain_loss</span>(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    B, T, V = logits.shape
+    <span class="cm"># Reshape for cross_entropy: (B*T, V) and (B*T,)</span>
+    logits  = logits.view(B * T, V)
+    targets = targets.view(B * T)
+    <span class="cm"># PyTorch fuses log-softmax + NLL internally — numerically stable</span>
+    loss = F.<span class="fn">cross_entropy</span>(logits, targets, reduction=<span class="st">'mean'</span>)
+    <span class="kw">return</span> loss
+
+<span class="cm"># ─── Shift tokens for causal LM ──────────────────────────────</span>
+<span class="kw">def</span> <span class="fn">causal_lm_loss</span>(logits, input_ids):
+    <span class="cm"># Model sees tokens[0:T-1], predicts tokens[1:T]</span>
+    shift_logits = logits[:, :-<span class="num">1</span>, :].contiguous()
+    shift_labels = input_ids[:, <span class="num">1</span>:].contiguous()
+    <span class="kw">return</span> <span class="fn">pretrain_loss</span>(shift_logits, shift_labels)
+
+<span class="cm"># ─── Sanity Check — Initial loss should ≈ log(vocab_size) ────</span>
+<span class="kw">def</span> <span class="fn">check_initial_loss</span>(vocab_size=<span class="num">50257</span>):
+    <span class="kw">import</span> math
+    expected = math.<span class="fn">log</span>(vocab_size)  <span class="cm"># ≈ 10.82 for GPT-2 vocab</span>
+    <span class="fn">print</span>(<span class="kw">f</span><span class="st">"Expected initial CE loss: {expected:.3f}"</span>)
+    <span class="kw">return</span> expected</pre>
+  </div>
+
+  <div class="code-wrap reveal">
+    <div class="code-header">
+      <span>SFT — Masked CE Loss (Response Tokens Only)</span>
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+    <pre><span class="cm"># ─── SFT Masked Loss — only train on assistant response ───────</span>
+<span class="cm"># loss_mask: 1 where we want gradients, 0 for prompt + padding</span>
+
+<span class="kw">def</span> <span class="fn">sft_loss</span>(logits, labels, loss_mask):
+    <span class="cm">"""
+    logits:    (B, T, V) — model predictions
+    labels:    (B, T)    — token IDs (-100 where masked)
+    loss_mask: (B, T)    — 1 for response tokens, 0 otherwise
+    """</span>
+    B, T, V = logits.shape
+    shift_logits = logits[:, :-<span class="num">1</span>, :].reshape(-<span class="num">1</span>, V)
+    shift_labels = labels[:, <span class="num">1</span>:].reshape(-<span class="num">1</span>)
+    
+    <span class="cm"># PyTorch ignores index -100 by default (ignore_index=-100)</span>
+    loss = F.<span class="fn">cross_entropy</span>(
+        shift_logits, shift_labels,
+        ignore_index=-<span class="num">100</span>,  <span class="cm"># masks padding AND prompt tokens</span>
+        reduction=<span class="st">'sum'</span>
+    )
+    <span class="cm"># Normalise by number of active (non-masked) tokens</span>
+    n_active = (shift_labels != -<span class="num">100</span>).<span class="fn">sum</span>()
+    <span class="kw">return</span> loss / n_active.clamp(min=<span class="num">1</span>)
+
+<span class="cm"># ─── Build labels with prompt masking ────────────────────────</span>
+<span class="kw">def</span> <span class="fn">build_sft_labels</span>(input_ids, prompt_length):
+    labels = input_ids.<span class="fn">clone</span>()
+    labels[:, :prompt_length] = -<span class="num">100</span>  <span class="cm"># Mask prompt positions</span>
+    <span class="kw">return</span> labels
+
+<span class="cm"># ─── Label Smoothing (optional, useful for small datasets) ───</span>
+criterion = nn.<span class="cls">CrossEntropyLoss</span>(
+    label_smoothing=<span class="num">0.1</span>,   <span class="cm"># ε = 0.1</span>
+    ignore_index=-<span class="num">100</span>
+)</pre>
+  </div>
+
+  <div class="code-wrap reveal">
+    <div class="code-header">
+      <span>DPO Loss — Preference-Based Alignment</span>
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+    <pre><span class="cm"># ─── Direct Preference Optimisation (DPO) Loss ───────────────</span>
+<span class="cm"># Reformulates RLHF as a classification problem using CE's log-ratio</span>
+
+<span class="kw">def</span> <span class="fn">dpo_loss</span>(
+    policy_chosen_logps,     <span class="cm"># log P_θ(y_w | x) — policy on preferred</span>
+    policy_rejected_logps,   <span class="cm"># log P_θ(y_l | x) — policy on rejected</span>
+    ref_chosen_logps,        <span class="cm"># log P_ref(y_w | x) — reference on preferred</span>
+    ref_rejected_logps,      <span class="cm"># log P_ref(y_l | x) — reference on rejected</span>
+    beta=<span class="num">0.1</span>               <span class="cm"># KL penalty coefficient</span>
+):
+    <span class="cm"># Log-ratio advantage: how much more the policy prefers chosen vs ref</span>
+    pi_logratios = policy_chosen_logps - policy_rejected_logps
+    ref_logratios = ref_chosen_logps - ref_rejected_logps
+    
+    <span class="cm"># DPO objective: reward difference scaled by beta</span>
+    h = beta * (pi_logratios - ref_logratios)
+    
+    <span class="cm"># Cross-entropy-style binary classification loss</span>
+    losses = -F.<span class="fn">logsigmoid</span>(h)
+    
+    <span class="cm"># Track reward estimates for monitoring</span>
+    chosen_rewards   = beta * (policy_chosen_logps - ref_chosen_logps).detach()
+    rejected_rewards = beta * (policy_rejected_logps - ref_rejected_logps).detach()
+    
+    <span class="kw">return</span> losses.<span class="fn">mean</span>(), chosen_rewards.<span class="fn">mean</span>(), rejected_rewards.<span class="fn">mean</span>()
+
+<span class="cm"># ─── Compute per-token log probabilities ─────────────────────</span>
+<span class="kw">def</span> <span class="fn">get_log_probs</span>(logits, labels, mask):
+    log_probs = F.<span class="fn">log_softmax</span>(logits, dim=-<span class="num">1</span>)
+    chosen    = log_probs.<span class="fn">gather</span>(-<span class="num">1</span>, labels.unsqueeze(-<span class="num">1</span>)).squeeze(-<span class="num">1</span>)
+    <span class="kw">return</span> (chosen * mask).<span class="fn">sum</span>(-<span class="num">1</span>) / mask.<span class="fn">sum</span>(-<span class="num">1</span>).clamp(min=<span class="num">1</span>)</pre>
+  </div>
+
+  <div class="code-wrap reveal">
+    <div class="code-header">
+      <span>Perplexity Evaluation + Loss Monitoring</span>
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+    <pre><span class="kw">import</span> math
+
+<span class="cm"># ─── Perplexity from Cross-Entropy Loss ──────────────────────</span>
+<span class="kw">def</span> <span class="fn">compute_perplexity</span>(model, dataloader, device):
+    model.<span class="fn">eval</span>()
+    total_loss = <span class="num">0.0</span>
+    total_tokens = <span class="num">0</span>
+    
+    <span class="kw">with</span> torch.<span class="fn">no_grad</span>():
+        <span class="kw">for</span> batch <span class="kw">in</span> dataloader:
+            input_ids = batch[<span class="st">'input_ids'</span>].<span class="fn">to</span>(device)
+            labels    = batch[<span class="st">'labels'</span>].<span class="fn">to</span>(device)
+            
+            outputs   = model(input_ids)
+            logits    = outputs.logits
+            
+            shift_logits = logits[:, :-<span class="num">1</span>, :].reshape(-<span class="num">1</span>, logits.size(-<span class="num">1</span>))
+            shift_labels = labels[:, <span class="num">1</span>:].reshape(-<span class="num">1</span>)
+            
+            <span class="cm"># Sum (not mean) to accumulate correctly</span>
+            loss = F.<span class="fn">cross_entropy</span>(
+                shift_logits, shift_labels,
+                ignore_index=-<span class="num">100</span>, reduction=<span class="st">'sum'</span>
+            )
+            n_tokens = (shift_labels != -<span class="num">100</span>).<span class="fn">sum</span>()
+            
+            total_loss   += loss.<span class="fn">item</span>()
+            total_tokens += n_tokens.<span class="fn">item</span>()
+    
+    avg_nll    = total_loss / total_tokens
+    perplexity = math.<span class="fn">exp</span>(avg_nll)
+    
+    <span class="fn">print</span>(<span class="kw">f</span><span class="st">"NLL: {avg_nll:.4f} | Perplexity: {perplexity:.2f}"</span>)
+    <span class="kw">return</span> perplexity
+
+<span class="cm"># ─── Training Step with Full Monitoring ──────────────────────</span>
+<span class="kw">def</span> <span class="fn">training_step</span>(model, optimizer, batch, step, log_every=<span class="num">100</span>):
+    optimizer.<span class="fn">zero_grad</span>()
+    
+    logits = model(batch[<span class="st">'input_ids'</span>]).logits
+    loss   = <span class="fn">causal_lm_loss</span>(logits, batch[<span class="st">'input_ids'</span>])
+    
+    loss.<span class="fn">backward</span>()
+    
+    <span class="cm"># Gradient clipping — essential for training stability</span>
+    grad_norm = nn.utils.<span class="fn">clip_grad_norm_</span>(model.<span class="fn">parameters</span>(), max_norm=<span class="num">1.0</span>)
+    
+    optimizer.<span class="fn">step</span>()
+    
+    <span class="kw">if</span> step % log_every == <span class="num">0</span>:
+        ppl = math.<span class="fn">exp</span>(loss.<span class="fn">item</span>())
+        <span class="fn">print</span>(<span class="kw">f</span><span class="st">"Step {step:6d} | Loss: {loss.item():.4f} | PPL: {ppl:.2f} | GradNorm: {grad_norm:.4f}"</span>)
+    
+    <span class="kw">return</span> loss.<span class="fn">item</span>()</pre>
+  </div>
+</section>
+
+<div class="divider"></div>
+<footer>
+  Cross-Entropy Loss — The Signal Behind Every Learned Weight &nbsp;·&nbsp; Part of the Transformer Architecture Series
+</footer>
+
+<!-- ═══════════════════════════ SCRIPTS ═══════════════════════════ -->
+<script>
+// ─── PROGRESS BAR ────────────────────────────────────────────
+const progressBar = document.getElementById('progress');
+window.addEventListener('scroll', () => {
+  const h = document.documentElement;
+  const pct = h.scrollTop / (h.scrollHeight - h.clientHeight) * 100;
+  progressBar.style.width = pct + '%';
+});
+
+// ─── SCROLL REVEAL ───────────────────────────────────────────
+const revealEls = document.querySelectorAll('.reveal');
+const revealObs = new IntersectionObserver((entries) => {
+  entries.forEach((e, i) => {
+    if (e.isIntersecting) {
+      setTimeout(() => e.target.classList.add('visible'), 80);
+      revealObs.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.08 });
+revealEls.forEach(el => revealObs.observe(el));
+
+// ─── HERO CANVAS — PARTICLE PROBABILITY FIELD ─────────────────
+const heroCanvas = document.getElementById('heroCanvas');
+const hCtx = heroCanvas.getContext('2d');
+let particles = [];
+let hW, hH;
+
+function resizeHero() {
+  hW = heroCanvas.width  = heroCanvas.offsetWidth;
+  hH = heroCanvas.height = heroCanvas.offsetHeight;
+}
+resizeHero();
+window.addEventListener('resize', resizeHero);
+
+for (let i = 0; i < 60; i++) {
+  particles.push({
+    x: Math.random() * 1400,
+    y: Math.random() * 900,
+    vx: (Math.random() - 0.5) * 0.3,
+    vy: (Math.random() - 0.5) * 0.3,
+    r: Math.random() * 2 + 0.5,
+    a: Math.random() * 0.4 + 0.1,
+    color: Math.random() > 0.5 ? '#f59e0b' : '#2dd4bf'
+  });
+}
+
+function animHero() {
+  hCtx.clearRect(0, 0, hW, hH);
+  particles.forEach(p => {
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < 0) p.x = hW; if (p.x > hW) p.x = 0;
+    if (p.y < 0) p.y = hH; if (p.y > hH) p.y = 0;
+    hCtx.beginPath();
+    hCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    hCtx.fillStyle = p.color + Math.floor(p.a * 255).toString(16).padStart(2,'0');
+    hCtx.fill();
+  });
+  // Draw soft connections
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i + 1; j < particles.length; j++) {
+      const dx = particles[i].x - particles[j].x;
+      const dy = particles[i].y - particles[j].y;
+      const d = Math.sqrt(dx*dx + dy*dy);
+      if (d < 120) {
+        hCtx.beginPath();
+        hCtx.strokeStyle = `rgba(245,158,11,${0.06 * (1 - d/120)})`;
+        hCtx.lineWidth = 0.5;
+        hCtx.moveTo(particles[i].x, particles[i].y);
+        hCtx.lineTo(particles[j].x, particles[j].y);
+        hCtx.stroke();
+      }
+    }
+  }
+  requestAnimationFrame(animHero);
+}
+animHero();
+
+// ─── PROBABILITY BARS INTERACTIVE DEMO ───────────────────────
+const tokens = [
+  { name: 'dog',  prob: 0.42, true: false },
+  { name: 'cat',  prob: 0.28, true: true  },
+  { name: 'fox',  prob: 0.15, true: false },
+  { name: 'wolf', prob: 0.09, true: false },
+  { name: 'bear', prob: 0.06, true: false },
+];
+
+const container = document.getElementById('probBarsContainer');
+const lossVal   = document.getElementById('lossValue');
+const lossExplain = document.getElementById('lossExplain');
+
+// Build bar rows
+const trueIdx = tokens.findIndex(t => t.true);
+const headers = document.createElement('div');
+headers.className = 'prob-row';
+headers.style.cssText = 'margin-bottom:8px;';
+headers.innerHTML = `
+  <div class="prob-label" style="color:var(--amber);font-size:10px;letter-spacing:2px">TOKEN</div>
+  <div style="font-family:var(--mono);font-size:10px;color:var(--violet);letter-spacing:1px">MODEL PROB</div>
+  <div style="font-family:var(--mono);font-size:10px;color:var(--amber);letter-spacing:1px">VALUE</div>
+  <div style="font-family:var(--mono);font-size:10px;color:var(--rose);letter-spacing:1px">-log(p)</div>`;
+container.appendChild(headers);
+
+tokens.forEach((t, i) => {
+  const row = document.createElement('div');
+  row.className = 'prob-row';
+  row.id = 'prow-' + i;
+  const isTrue = t.true;
+  const loss_i = (-Math.log(t.prob)).toFixed(3);
+  const lossClass = t.prob > 0.3 ? 'low' : t.prob > 0.1 ? '' : 'high';
+  row.innerHTML = `
+    <div class="prob-label" style="color:${isTrue ? 'var(--amber)' : 'var(--muted)'}">
+      ${isTrue ? '★ ' : ''}${t.name}
+    </div>
+    <div class="prob-bar-track">
+      <div class="prob-bar-fill model" style="width:${t.prob*100}%"></div>
+    </div>
+    <div class="prob-val">${(t.prob*100).toFixed(0)}%</div>
+    <div class="prob-loss ${lossClass}">${isTrue ? loss_i : '—'}</div>`;
+  container.appendChild(row);
+});
+
+// Selected token display
+let selectedIdx = null;
+const tokenRow = document.createElement('div');
+tokenRow.className = 'token-row';
+tokenRow.style.marginTop = '28px';
+tokens.forEach((t, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'token-btn';
+  btn.textContent = `"${t.name}" (${(t.prob*100).toFixed(0)}%)`;
+  btn.onclick = () => selectToken(i, btn);
+  tokenRow.appendChild(btn);
+  t.btn = btn;
+});
+container.parentNode.insertBefore(tokenRow, container);
+
+function selectToken(idx, btn) {
+  selectedIdx = idx;
+  tokens.forEach(t => t.btn && t.btn.classList.remove('active'));
+  btn.classList.add('active');
+  const t = tokens[idx];
+  const loss = -Math.log(t.prob);
+  lossVal.textContent = loss.toFixed(4);
+  if (t.true) {
+    lossVal.className = 'loss-number low-loss';
+    lossExplain.innerHTML = `<strong style="color:var(--green)">Correct token!</strong> The model assigned ${(t.prob*100).toFixed(0)}% probability to "${t.name}". Loss = −log(${t.prob}) = ${loss.toFixed(3)}. The model is reasonably confident in the right answer.`;
+  } else {
+    lossVal.className = loss > 2 ? 'loss-number high-loss' : 'loss-number';
+    lossExplain.innerHTML = `<strong style="color:var(--rose)">Wrong token selected.</strong> The model gave "${t.name}" ${(t.prob*100).toFixed(0)}% probability — but the true token is <em>"cat"</em> (${(tokens[trueIdx].prob*100).toFixed(0)}%). Loss = −log(${tokens[trueIdx].prob}) = ${(-Math.log(tokens[trueIdx].prob)).toFixed(3)}. Cross-entropy always uses the probability assigned to the <em>correct</em> token.`;
+    // loss is still on the correct token
+    lossVal.textContent = (-Math.log(tokens[trueIdx].prob)).toFixed(4);
+  }
+}
+
+// ─── TEMPERATURE / SOFTMAX DEMO ──────────────────────────────
+const rawLogits = [3.2, 1.8, 0.9, 0.4, -0.3]; // cat, dog, fox, wolf, bear
+const tokenNames = ['cat','dog','fox','wolf','bear'];
+const tempSlider = document.getElementById('tempSlider');
+const tempVal    = document.getElementById('tempVal');
+const tempLossInfo = document.getElementById('tempLossInfo');
+const smCanvas   = document.getElementById('softmaxCanvas');
+const smCtx      = smCanvas.getContext('2d');
+
+function softmax(logits, temp) {
+  const scaled = logits.map(l => l / temp);
+  const maxL = Math.max(...scaled);
+  const exps = scaled.map(l => Math.exp(l - maxL));
+  const sum  = exps.reduce((a,b) => a+b, 0);
+  return exps.map(e => e / sum);
+}
+
+function drawSoftmax(temp) {
+  smCanvas.width  = smCanvas.offsetWidth;
+  smCanvas.height = smCanvas.offsetHeight;
+  const W = smCanvas.width, H = smCanvas.height;
+  smCtx.clearRect(0,0,W,H);
+  const probs = softmax(rawLogits, temp);
+  const barW = W / probs.length;
+  const barColors = ['#f59e0b','#2dd4bf','#a78bfa','#fb7185','#4ade80'];
+
+  probs.forEach((p, i) => {
+    const bH = p * (H - 40);
+    const x  = i * barW + 8;
+    const y  = H - bH - 28;
+    // Bar
+    const grad = smCtx.createLinearGradient(x, y, x, H-28);
+    grad.addColorStop(0, barColors[i] + 'cc');
+    grad.addColorStop(1, barColors[i] + '33');
+    smCtx.fillStyle = grad;
+    smCtx.roundRect(x, y, barW - 16, bH, 4);
+    smCtx.fill();
+    // Label
+    smCtx.fillStyle = '#e2e8f0';
+    smCtx.font = '11px Space Mono, monospace';
+    smCtx.textAlign = 'center';
+    smCtx.fillText(tokenNames[i], x + (barW-16)/2, H - 10);
+    // Prob
+    smCtx.fillStyle = barColors[i];
+    smCtx.font = '10px Space Mono, monospace';
+    smCtx.fillText((p*100).toFixed(1)+'%', x + (barW-16)/2, Math.max(y - 6, 14));
+  });
+
+  // Loss for "cat" (index 0)
+  const catProb = probs[0];
+  const loss = -Math.log(catProb);
+  tempLossInfo.textContent = `τ = ${temp.toFixed(2)} → P("cat") = ${(catProb*100).toFixed(1)}% → CE Loss = ${loss.toFixed(3)} | Perplexity = ${Math.exp(loss).toFixed(2)}`;
+}
+
+tempSlider.addEventListener('input', () => {
+  const t = parseFloat(tempSlider.value);
+  tempVal.textContent = t.toFixed(1);
+  drawSoftmax(t);
+});
+drawSoftmax(1.0);
+window.addEventListener('resize', () => drawSoftmax(parseFloat(tempSlider.value)));
+
+// ─── TRAINING LOSS CHART ──────────────────────────────────────
+const lossCanvas = document.getElementById('lossChartCanvas');
+const lCtx = lossCanvas.getContext('2d');
+let chartAnimFrame = null;
+let chartProgress  = 0;
+let chartStarted   = false;
+
+function generateLossCurve(n, start, end, noise, variance = 0) {
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);
+    const base = start * Math.pow(end / start, t);
+    const noiseAmt = noise * Math.exp(-t * 2) + (noise * 0.3);
+    const nVal = base + (Math.random() - 0.5) * noiseAmt + variance * Math.sin(i * 0.3) * 0.05;
+    pts.push(Math.max(nVal, end * 0.8));
+  }
+  return pts;
+}
+
+const nPts = 120;
+const trainLoss = generateLossCurve(nPts, 10.8, 1.8, 0.6);
+const valLoss   = generateLossCurve(nPts, 10.9, 2.1, 0.4);
+// Simulate overfitting at the end
+for (let i = 90; i < nPts; i++) {
+  const t = (i - 90) / 30;
+  valLoss[i] += t * t * 0.8;
+}
+
+function drawLossChart(progress) {
+  lossCanvas.width  = lossCanvas.offsetWidth;
+  lossCanvas.height = lossCanvas.offsetHeight;
+  const W = lossCanvas.width, H = lossCanvas.height;
+  const pad = { top: 20, right: 30, bottom: 44, left: 52 };
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top - pad.bottom;
+
+  lCtx.clearRect(0,0,W,H);
+
+  const maxL = 11.5, minL = 0.8;
+  const visN = Math.floor(nPts * Math.min(progress, 1));
+  if (visN < 2) return;
+
+  const xS = i => pad.left + (i / (nPts - 1)) * cW;
+  const yS = v => pad.top + (1 - (v - minL) / (maxL - minL)) * cH;
+
+  // Grid lines
+  lCtx.strokeStyle = 'rgba(255,255,255,0.04)';
+  lCtx.lineWidth = 1;
+  for (let g = 0; g <= 5; g++) {
+    const yv = minL + (maxL - minL) * g / 5;
+    const y = yS(yv);
+    lCtx.beginPath(); lCtx.moveTo(pad.left, y); lCtx.lineTo(W - pad.right, y); lCtx.stroke();
+    lCtx.fillStyle = '#475569'; lCtx.font = '10px Space Mono,monospace';
+    lCtx.textAlign = 'right';
+    lCtx.fillText(yv.toFixed(1), pad.left - 8, y + 3);
+  }
+
+  // X axis labels
+  lCtx.fillStyle = '#475569'; lCtx.textAlign = 'center';
+  ['0','25k','50k','75k','100k'].forEach((lbl, i) => {
+    lCtx.fillText(lbl + ' steps', pad.left + (i/4)*cW, H - 12);
+  });
+
+  // Overfitting zone
+  const ofStart = xS(90);
+  const grad = lCtx.createLinearGradient(ofStart, 0, W - pad.right, 0);
+  grad.addColorStop(0, 'rgba(251,113,133,0)');
+  grad.addColorStop(1, 'rgba(251,113,133,0.07)');
+  lCtx.fillStyle = grad;
+  if (progress > 0.75) {
+    lCtx.fillRect(ofStart, pad.top, W - pad.right - ofStart, cH);
+    lCtx.fillStyle = 'rgba(251,113,133,0.5)';
+    lCtx.font = '10px Space Mono,monospace'; lCtx.textAlign = 'left';
+    lCtx.fillText('overfitting zone', ofStart + 6, pad.top + 14);
+  }
+
+  // Draw train loss
+  const drawLine = (data, color, dashed) => {
+    lCtx.beginPath();
+    if (dashed) lCtx.setLineDash([6,4]); else lCtx.setLineDash([]);
+    lCtx.strokeStyle = color;
+    lCtx.lineWidth = 2.5;
+    for (let i = 0; i < Math.min(visN, data.length); i++) {
+      const x = xS(i), y = yS(data[i]);
+      i === 0 ? lCtx.moveTo(x,y) : lCtx.lineTo(x,y);
+    }
+    lCtx.stroke();
+    lCtx.setLineDash([]);
+  };
+
+  drawLine(trainLoss, '#f59e0b', false);
+  drawLine(valLoss,   '#2dd4bf', true);
+
+  // Current loss dot
+  if (visN > 1) {
+    const li = visN - 1;
+    lCtx.beginPath();
+    lCtx.arc(xS(li), yS(trainLoss[li]), 5, 0, Math.PI*2);
+    lCtx.fillStyle = '#f59e0b'; lCtx.fill();
+  }
+}
+
+// Animate chart on scroll into view
+const chartObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting && !chartStarted) {
+      chartStarted = true;
+      const start = Date.now();
+      const dur = 2800;
+      function frame() {
+        const t = (Date.now() - start) / dur;
+        chartProgress = Math.min(t, 1);
+        drawLossChart(chartProgress);
+        if (chartProgress < 1) chartAnimFrame = requestAnimationFrame(frame);
+      }
+      frame();
+    }
+  });
+}, { threshold: 0.2 });
+chartObserver.observe(lossCanvas);
+window.addEventListener('resize', () => drawLossChart(chartProgress));
+
+// ─── COPY CODE ────────────────────────────────────────────────
+function copyCode(btn) {
+  const pre = btn.closest('.code-wrap').querySelector('pre');
+  navigator.clipboard.writeText(pre.innerText).then(() => {
+    btn.textContent = 'Copied!';
+    btn.style.color = 'var(--green)';
+    setTimeout(() => { btn.textContent = 'Copy'; btn.style.color = ''; }, 2000);
+  });
+}
+</script>
+</body>
+</html>
